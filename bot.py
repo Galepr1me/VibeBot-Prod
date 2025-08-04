@@ -358,7 +358,7 @@ async def help_slash(interaction: discord.Interaction):
     """Show all available commands"""
     try:
         embed = discord.Embed(
-            title="🤖 VibeBot Commands v1.2.2", 
+            title="🤖 VibeBot Commands v1.2.4", 
             description="Your modular Discord bot with card games and XP systems!",
             color=0x00d4ff
         )
@@ -382,33 +382,31 @@ async def help_slash(interaction: discord.Interaction):
             inline=False
         )
         
-        # Admin Commands (show to admins and specific roles)
-        is_admin = False
-        
-        # Check if user is server owner
-        if interaction.guild and interaction.guild.owner_id == interaction.user.id:
-            is_admin = True
-        
-        # Check if user has administrator permissions
-        elif hasattr(interaction.user, 'guild_permissions') and interaction.user.guild_permissions.administrator:
-            is_admin = True
-        
-        # Check for specific admin roles (you can customize these role names)
-        elif interaction.guild and hasattr(interaction.user, 'roles'):
-            admin_role_names = ['Admin', 'Moderator', 'Bot Admin', 'Staff']  # Add your role names here
+        # Check if user has Staff role (admin access)
+        is_staff = False
+        if interaction.guild and hasattr(interaction.user, 'roles'):
             user_roles = [role.name for role in interaction.user.roles]
-            if any(role in admin_role_names for role in user_roles):
-                is_admin = True
+            if 'Staff' in user_roles:
+                is_staff = True
         
-        if is_admin:
+        # Server owner always has access
+        if interaction.guild and interaction.guild.owner_id == interaction.user.id:
+            is_staff = True
+        
+        if is_staff:
             embed.add_field(
-                name="🔧 Admin Commands", 
-                value="🔹 `/give_tokens <user> [quantity]` - Give pack tokens to user\n🔹 `/debug_bot` - System diagnostics and troubleshooting",
+                name="🔧 Bot Management Commands", 
+                value="🔹 `/give_tokens <user> [quantity]` - Give pack tokens to user\n🔹 `/wipe_user <user>` - Wipe user's card data\n🔹 `/set_config <key> <value>` - Configure bot settings",
                 inline=False
             )
-            embed.set_footer(text="🔐 Admin commands visible to administrators only • Version 1.2.2")
+            embed.add_field(
+                name="🛠️ System Commands", 
+                value="🔹 `/debug_bot` - System diagnostics and troubleshooting\n🔹 `/bot_stats` - View bot statistics\n🔹 `/reload_cards` - Reload card library",
+                inline=False
+            )
+            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.4")
         else:
-            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.2")
+            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.4")
         
         # Check if interaction has already been responded to
         if not interaction.response.is_done():
@@ -505,6 +503,121 @@ async def debug_bot_slash(interaction: discord.Interaction):
             color=0xff0000
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
+@bot.tree.command(name='wipe_user', description='Wipe a user\'s card data (Staff only)')
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(user='User whose data to wipe')
+async def wipe_user_slash(interaction: discord.Interaction, user: discord.Member):
+    """Wipe a user's card data - Staff only"""
+    try:
+        # Wipe user's cards and pack tokens
+        card_success = card_manager.wipe_user_collection(user.id)
+        pack_success = pack_system.wipe_user_pack_tokens(user.id)
+        
+        if card_success and pack_success:
+            embed = discord.Embed(
+                title="✅ User Data Wiped",
+                description=f"Successfully wiped all card data for {user.mention}\n\n🗑️ **Removed:**\n• All cards from collection\n• All pack tokens\n• Daily reward streak",
+                color=0x00ff00
+            )
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message("❌ Failed to wipe user data", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error wiping user data: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name='set_config', description='Configure bot settings (Staff only)')
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(key='Configuration key', value='Configuration value')
+async def set_config_slash(interaction: discord.Interaction, key: str, value: str):
+    """Set bot configuration - Staff only"""
+    try:
+        success = set_config(key, value)
+        
+        if success:
+            embed = discord.Embed(
+                title="✅ Configuration Updated",
+                description=f"Successfully updated configuration",
+                color=0x00ff00
+            )
+            embed.add_field(name="Key", value=f"`{key}`", inline=True)
+            embed.add_field(name="Value", value=f"`{value}`", inline=True)
+            embed.add_field(name="Status", value="✅ Applied", inline=True)
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message("❌ Failed to update configuration", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error updating config: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name='bot_stats', description='View bot statistics (Staff only)')
+@app_commands.default_permissions(administrator=True)
+async def bot_stats_slash(interaction: discord.Interaction):
+    """View bot statistics - Staff only"""
+    try:
+        # Get pack system stats
+        pack_stats = pack_system.get_pack_system_stats()
+        
+        # Get user count
+        user_count_result = db_manager.fetch_one('SELECT COUNT(*) FROM users')
+        user_count = user_count_result[0] if user_count_result else 0
+        
+        # Get total XP
+        total_xp_result = db_manager.fetch_one('SELECT SUM(xp) FROM users')
+        total_xp = total_xp_result[0] if total_xp_result and total_xp_result[0] else 0
+        
+        embed = discord.Embed(
+            title="📊 Bot Statistics",
+            description="Comprehensive bot usage statistics",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="👥 User Statistics",
+            value=f"**Total Users:** {user_count:,}\n**Total XP Earned:** {total_xp:,}\n**Users with Tokens:** {pack_stats.get('users_with_tokens', 0)}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎫 Pack System",
+            value=f"**Tokens in Circulation:** {pack_stats.get('total_tokens_in_circulation', 0)}\n**Estimated Packs Opened:** {pack_stats.get('estimated_packs_opened', 0)}\n**Total Cards Collected:** {pack_stats.get('total_cards_collected', 0)}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎮 Game Statistics",
+            value=f"**Cards in Library:** {pack_stats.get('cards_in_library', 0)}\n**Database Type:** {db_manager.db_type}\n**Game Status:** {get_config('game_enabled')}",
+            inline=True
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error getting bot stats: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name='reload_cards', description='Reload card library (Staff only)')
+@app_commands.default_permissions(administrator=True)
+async def reload_cards_slash(interaction: discord.Interaction):
+    """Reload card library - Staff only"""
+    try:
+        # Reinitialize card library
+        global card_library
+        card_library = CardLibrary()
+        
+        # Get card count
+        total_cards = len(card_library.get_all_cards())
+        
+        embed = discord.Embed(
+            title="🔄 Card Library Reloaded",
+            description=f"Successfully reloaded the card library",
+            color=0x00ff00
+        )
+        embed.add_field(name="Total Cards", value=f"{total_cards} cards loaded", inline=True)
+        embed.add_field(name="Status", value="✅ Ready", inline=True)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error reloading cards: {str(e)}", ephemeral=True)
 
 # Flask web server for cloud hosting
 app = Flask(__name__)
