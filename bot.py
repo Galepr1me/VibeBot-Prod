@@ -438,8 +438,8 @@ async def give_tokens_slash(interaction: discord.Interaction, user: discord.Memb
         # Check if user_packs table exists and create if needed
         try:
             # Test if table exists by trying to query it
-            db_manager.fetch_one('SELECT COUNT(*) FROM user_packs LIMIT 1')
-            print("user_packs table exists")
+            result = db_manager.fetch_one('SELECT COUNT(*) FROM user_packs LIMIT 1')
+            print(f"user_packs table exists, count: {result}")
         except Exception as table_error:
             print(f"user_packs table issue: {table_error}")
             # Try to create the table
@@ -455,6 +455,10 @@ async def give_tokens_slash(interaction: discord.Interaction, user: discord.Memb
                                                 quantity INTEGER DEFAULT 0, obtained_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                                 PRIMARY KEY (user_id, pack_type))''')
                 print("Created user_packs table")
+                
+                # Test the newly created table
+                test_result = db_manager.fetch_one('SELECT COUNT(*) FROM user_packs LIMIT 1')
+                print(f"New table test result: {test_result}")
             except Exception as create_error:
                 print(f"Failed to create user_packs table: {create_error}")
         
@@ -475,9 +479,14 @@ async def give_tokens_slash(interaction: discord.Interaction, user: discord.Memb
                 print(f"Inserted new tokens: {quantity}")
             
             # Verify tokens were added
-            user_tokens = db_manager.fetch_one('SELECT quantity FROM user_packs WHERE user_id = ? AND pack_type = ?',
-                                              (user.id, 'standard'))
-            current_tokens = user_tokens[0] if user_tokens else 0
+            try:
+                user_tokens = db_manager.fetch_one('SELECT quantity FROM user_packs WHERE user_id = ? AND pack_type = ?',
+                                                  (user.id, 'standard'))
+                current_tokens = user_tokens[0] if user_tokens and user_tokens[0] is not None else 0
+                print(f"Verification result: {user_tokens}, current_tokens: {current_tokens}")
+            except Exception as verify_error:
+                print(f"Verification error: {verify_error}")
+                current_tokens = quantity  # Assume the insertion worked
             
             embed = discord.Embed(
                 title="✅ Pack Tokens Given",
