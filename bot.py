@@ -768,19 +768,26 @@ def run_flask():
 
 if __name__ == '__main__':
     token = os.getenv('DISCORD_TOKEN')
+    print(f"[MAIN] Discord token present: {bool(token)}")
+    
     if not token:
-        print("Please set the DISCORD_TOKEN environment variable")
+        print("[MAIN] ❌ Please set the DISCORD_TOKEN environment variable")
     else:
         # Start Flask server in a separate thread for cloud hosting
         flask_thread = threading.Thread(target=run_flask)
         flask_thread.daemon = True
         flask_thread.start()
         
-        print("Flask server started")
-        print("Starting VibeBot with modular architecture...")
+        print("[MAIN] Flask server started")
+        print("[MAIN] Starting VibeBot with modular architecture...")
+        print(f"[MAIN] Bot intents: {bot.intents}")
+        print(f"[MAIN] Bot command prefix: {bot.command_prefix}")
         
         try:
+            print("[MAIN] Calling bot.run()...")
             bot.run(token)
         except Exception as e:
-            print(f"Bot error: {e}")
+            print(f"[MAIN] ❌ Bot error: {e}")
+            import traceback
+            traceback.print_exc()
             flask_thread.join()
