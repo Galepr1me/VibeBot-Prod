@@ -432,61 +432,15 @@ async def give_tokens_slash(interaction: discord.Interaction, user: discord.Memb
     """Give pack tokens to a user - Admin only"""
     try:
         # Ensure user exists in database first
-        print(f"Creating user data for {user.id}")
         get_user_data(user.id)
         
-        # Check if user_packs table exists and create if needed
-        try:
-            # Test if table exists by trying to query it
-            result = db_manager.fetch_one('SELECT COUNT(*) FROM user_packs LIMIT 1')
-            print(f"user_packs table exists, count: {result}")
-        except Exception as table_error:
-            print(f"user_packs table issue: {table_error}")
-            # Try to create the table
-            try:
-                if db_manager.db_type == 'postgresql':
-                    db_manager.execute_query('''CREATE TABLE IF NOT EXISTS user_packs
-                                               (user_id BIGINT NOT NULL, pack_type TEXT DEFAULT 'standard', 
-                                                quantity INTEGER DEFAULT 0, obtained_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                                                PRIMARY KEY (user_id, pack_type))''')
-                else:
-                    db_manager.execute_query('''CREATE TABLE IF NOT EXISTS user_packs
-                                               (user_id INTEGER NOT NULL, pack_type TEXT DEFAULT 'standard', 
-                                                quantity INTEGER DEFAULT 0, obtained_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                                                PRIMARY KEY (user_id, pack_type))''')
-                print("Created user_packs table")
-                
-                # Test the newly created table
-                test_result = db_manager.fetch_one('SELECT COUNT(*) FROM user_packs LIMIT 1')
-                print(f"New table test result: {test_result}")
-            except Exception as create_error:
-                print(f"Failed to create user_packs table: {create_error}")
+        # Use the modular pack system (it should handle table creation)
+        success = pack_system.add_pack_tokens(user.id, 'standard', quantity)
         
-        # Try direct database insertion instead of using pack_system
-        try:
-            # Check if user already has tokens
-            existing = db_manager.fetch_one('SELECT quantity FROM user_packs WHERE user_id = ? AND pack_type = ?', 
-                                           (user.id, 'standard'))
-            
-            if existing:
-                new_quantity = existing[0] + quantity
-                db_manager.execute_query('UPDATE user_packs SET quantity = ? WHERE user_id = ? AND pack_type = ?',
-                                       (new_quantity, user.id, 'standard'))
-                print(f"Updated tokens: {existing[0]} -> {new_quantity}")
-            else:
-                db_manager.execute_query('INSERT INTO user_packs (user_id, pack_type, quantity) VALUES (?, ?, ?)',
-                                       (user.id, 'standard', quantity))
-                print(f"Inserted new tokens: {quantity}")
-            
-            # Verify tokens were added
-            try:
-                user_tokens = db_manager.fetch_one('SELECT quantity FROM user_packs WHERE user_id = ? AND pack_type = ?',
-                                                  (user.id, 'standard'))
-                current_tokens = user_tokens[0] if user_tokens and user_tokens[0] is not None else 0
-                print(f"Verification result: {user_tokens}, current_tokens: {current_tokens}")
-            except Exception as verify_error:
-                print(f"Verification error: {verify_error}")
-                current_tokens = quantity  # Assume the insertion worked
+        if success:
+            # Get current token count
+            user_tokens = pack_system.get_user_pack_tokens(user.id)
+            current_tokens = user_tokens.get('standard', 0)
             
             embed = discord.Embed(
                 title="✅ Pack Tokens Given",
@@ -495,14 +449,12 @@ async def give_tokens_slash(interaction: discord.Interaction, user: discord.Memb
             )
             embed.add_field(
                 name="📊 Token Status",
-                value=f"🎫 **Current Tokens:** {current_tokens}\n✅ **Added:** {quantity} tokens\n🔧 **Database:** {db_manager.db_type}",
+                value=f"🎫 **Current Tokens:** {current_tokens}\n✅ **Added:** {quantity} tokens",
                 inline=False
             )
             await interaction.response.send_message(embed=embed)
-            
-        except Exception as db_error:
-            print(f"Direct database error: {db_error}")
-            await interaction.response.send_message(f"❌ Database error: {str(db_error)}", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Failed to give tokens. Please try again.", ephemeral=True)
             
     except Exception as e:
         error_msg = f"❌ Error giving tokens: {str(e)}"

@@ -164,11 +164,15 @@ class DatabaseManager:
             else:
                 cursor.execute(converted_query)
             
-            return cursor.fetchone()
+            result = cursor.fetchone()
+            return result  # This will be None if no results, which is expected
             
         except Exception as e:
-            print(f"Database error: {e}")
-            raise
+            print(f"Database error in fetch_one: {e}")
+            print(f"Query: {query}")
+            print(f"Params: {params}")
+            # Don't raise the exception, return None instead for empty results
+            return None
         finally:
             conn.close()
 
