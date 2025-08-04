@@ -401,7 +401,7 @@ async def help_slash(interaction: discord.Interaction):
             )
             embed.add_field(
                 name="🛠️ System Commands", 
-                value="🔹 `/debug_bot` - System diagnostics and troubleshooting\n🔹 `/bot_stats` - View bot statistics\n🔹 `/reload_cards` - Reload card library",
+                value="🔹 `/debug_bot` - System diagnostics and troubleshooting\n🔹 `/bot_stats` - View bot statistics\n🔹 `/reload_cards` - Reload card library\n🔹 `/list_config` - View all configuration settings",
                 inline=False
             )
             embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.4")
@@ -430,17 +430,36 @@ async def help_slash(interaction: discord.Interaction):
 @app_commands.describe(user='User to give tokens to', quantity='Number of tokens (default: 5)')
 async def give_tokens_slash(interaction: discord.Interaction, user: discord.Member, quantity: int = 5):
     """Give pack tokens to a user - Admin only"""
-    success = pack_system.add_pack_tokens(user.id, 'standard', quantity)
-    
-    if success:
-        embed = discord.Embed(
-            title="✅ Pack Tokens Given",
-            description=f"Successfully gave **{quantity}** pack tokens to {user.mention}",
-            color=0x00ff00
-        )
-        await interaction.response.send_message(embed=embed)
-    else:
-        await interaction.response.send_message("❌ Failed to give tokens", ephemeral=True)
+    try:
+        # Ensure user exists in database first
+        get_user_data(user.id)
+        
+        # Add pack tokens
+        success = pack_system.add_pack_tokens(user.id, 'standard', quantity)
+        
+        if success:
+            # Verify tokens were added
+            user_tokens = pack_system.get_user_pack_tokens(user.id)
+            current_tokens = user_tokens.get('standard', 0)
+            
+            embed = discord.Embed(
+                title="✅ Pack Tokens Given",
+                description=f"Successfully gave **{quantity}** pack tokens to {user.mention}",
+                color=0x00ff00
+            )
+            embed.add_field(
+                name="📊 Token Status",
+                value=f"🎫 **Current Tokens:** {current_tokens}\n✅ **Added:** {quantity} tokens",
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message("❌ Failed to give tokens - Database error", ephemeral=True)
+            
+    except Exception as e:
+        error_msg = f"❌ Error giving tokens: {str(e)}"
+        print(f"Give tokens error: {e}")
+        await interaction.response.send_message(error_msg, ephemeral=True)
 
 @bot.tree.command(name='debug_bot', description='Debug bot status and enable game (Admin only)')
 @app_commands.default_permissions(administrator=True)
@@ -618,6 +637,84 @@ async def reload_cards_slash(interaction: discord.Interaction):
         
     except Exception as e:
         await interaction.response.send_message(f"❌ Error reloading cards: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name='list_config', description='List all configuration keys and values (Staff only)')
+@app_commands.default_permissions(administrator=True)
+async def list_config_slash(interaction: discord.Interaction):
+    """List all configuration keys and values - Staff only"""
+    try:
+        # Get all config values
+        all_config = db_manager.fetch_all('SELECT key, value FROM config ORDER BY key')
+        
+        embed = discord.Embed(
+            title="⚙️ Bot Configuration",
+            description="All available configuration keys and their current values",
+            color=0x3498db
+        )
+        
+        if not all_config:
+            embed.add_field(
+                name="No Configuration Found",
+                value="No configuration keys are currently set.",
+                inline=False
+            )
+        else:
+            # Group configs by category
+            xp_configs = []
+            game_configs = []
+            message_configs = []
+            other_configs = []
+            
+            for key, value in all_config:
+                config_line = f"**{key}:** `{value}`"
+                
+                if 'xp' in key.lower() or 'level' in key.lower():
+                    xp_configs.append(config_line)
+                elif 'game' in key.lower() or 'quest' in key.lower() or 'event' in key.lower():
+                    game_configs.append(config_line)
+                elif 'message' in key.lower() or 'welcome' in key.lower():
+                    message_configs.append(config_line)
+                else:
+                    other_configs.append(config_line)
+            
+            if xp_configs:
+                embed.add_field(
+                    name="📊 XP System Settings",
+                    value="\n".join(xp_configs),
+                    inline=False
+                )
+            
+            if game_configs:
+                embed.add_field(
+                    name="🎮 Game Settings",
+                    value="\n".join(game_configs),
+                    inline=False
+                )
+            
+            if message_configs:
+                embed.add_field(
+                    name="💬 Message Settings",
+                    value="\n".join(message_configs),
+                    inline=False
+                )
+            
+            if other_configs:
+                embed.add_field(
+                    name="🔧 Other Settings",
+                    value="\n".join(other_configs),
+                    inline=False
+                )
+        
+        embed.add_field(
+            name="📝 Usage",
+            value="Use `/set_config <key> <value>` to modify any setting\nExample: `/set_config xp_per_message 20`",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error listing config: {str(e)}", ephemeral=True)
 
 # Flask web server for cloud hosting
 app = Flask(__name__)
