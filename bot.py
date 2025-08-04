@@ -103,18 +103,28 @@ def update_user_xp(user_id, xp_gain, username=None, display_name=None):
 # Bot Events
 @bot.event
 async def on_ready():
-    print(f'{bot.user} has connected to Discord!')
+    print(f'[BOT_STARTUP] {bot.user} has connected to Discord!')
     
     # Initialize database
-    db_setup.initialize_database()
+    try:
+        print("[BOT_STARTUP] Initializing database...")
+        db_setup.initialize_database()
+        print("[BOT_STARTUP] Database initialization complete")
+    except Exception as e:
+        print(f"[BOT_STARTUP] Database initialization failed: {e}")
     
     # Sync slash commands
     try:
-        print("🔄 Syncing slash commands...")
+        print("[BOT_STARTUP] 🔄 Syncing slash commands...")
         synced = await bot.tree.sync()
-        print(f"✅ Successfully synced {len(synced)} slash command(s)")
+        print(f"[BOT_STARTUP] ✅ Successfully synced {len(synced)} slash command(s)")
+        
+        # List the synced commands
+        for cmd in synced:
+            print(f"[BOT_STARTUP] - Synced command: /{cmd.name}")
+            
     except Exception as e:
-        print(f"❌ Failed to sync slash commands: {e}")
+        print(f"[BOT_STARTUP] ❌ Failed to sync slash commands: {e}")
 
 @bot.event
 async def on_message(message):
