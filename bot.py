@@ -441,29 +441,14 @@ async def help_slash(interaction: discord.Interaction):
 async def give_tokens_slash(interaction: discord.Interaction, user: discord.Member, quantity: int = 5):
     """Give pack tokens to a user - Admin only"""
     print(f"[GIVE_TOKENS] Command called! User: {user.id}, Quantity: {quantity}")
+    
+    # Respond immediately to avoid Discord timeout
+    await interaction.response.defer(ephemeral=False)
+    
     try:
         # Ensure user exists in database first
         print(f"[GIVE_TOKENS] Creating user data for {user.id}")
         get_user_data(user.id)
-        
-        # Check if user_packs table exists first
-        try:
-            test_query = db_manager.fetch_one('SELECT COUNT(*) FROM user_packs LIMIT 1')
-            print(f"[GIVE_TOKENS] user_packs table test: {test_query}")
-        except Exception as table_error:
-            print(f"[GIVE_TOKENS] user_packs table missing, creating it: {table_error}")
-            # Create the table manually
-            if db_manager.db_type == 'postgresql':
-                db_manager.execute_query('''CREATE TABLE IF NOT EXISTS user_packs
-                                           (user_id BIGINT NOT NULL, pack_type TEXT DEFAULT 'standard', 
-                                            quantity INTEGER DEFAULT 0, obtained_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                                            PRIMARY KEY (user_id, pack_type))''')
-            else:
-                db_manager.execute_query('''CREATE TABLE IF NOT EXISTS user_packs
-                                           (user_id INTEGER NOT NULL, pack_type TEXT DEFAULT 'standard', 
-                                            quantity INTEGER DEFAULT 0, obtained_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                                            PRIMARY KEY (user_id, pack_type))''')
-            print(f"[GIVE_TOKENS] Created user_packs table")
         
         # Use the modular pack system
         print(f"[GIVE_TOKENS] Calling pack_system.add_pack_tokens({user.id}, 'standard', {quantity})")
@@ -486,15 +471,15 @@ async def give_tokens_slash(interaction: discord.Interaction, user: discord.Memb
                 value=f"🎫 **Current Tokens:** {current_tokens}\n✅ **Added:** {quantity} tokens",
                 inline=False
             )
-            await interaction.response.send_message(embed=embed)
+            await interaction.followup.send(embed=embed)
         else:
             print(f"[GIVE_TOKENS] pack_system.add_pack_tokens returned False - checking why")
-            await interaction.response.send_message("❌ Failed to give tokens. Check Render logs for details.", ephemeral=True)
+            await interaction.followup.send("❌ Failed to give tokens. Check Render logs for details.", ephemeral=True)
             
     except Exception as e:
         error_msg = f"❌ Error giving tokens: {str(e)}"
         print(f"[GIVE_TOKENS] Exception: {e}")
-        await interaction.response.send_message(error_msg, ephemeral=True)
+        await interaction.followup.send(error_msg, ephemeral=True)
 
 @bot.tree.command(name='debug_bot', description='Debug bot status and enable game (Admin only)')
 @app_commands.default_permissions(administrator=True)
