@@ -89,12 +89,21 @@ class DatabaseManager:
             else:
                 cursor.execute(converted_query)
             
-            result = cursor.fetchone()
-            conn.commit()
-            return result
+            # Only try to fetch results for SELECT queries
+            query_type = query.strip().upper().split()[0]
+            if query_type == 'SELECT':
+                result = cursor.fetchone()
+                conn.commit()
+                return result
+            else:
+                # For INSERT, UPDATE, DELETE - just commit and return success
+                conn.commit()
+                return True
             
         except Exception as e:
-            print(f"Database error: {e}")
+            print(f"Database error in execute_query: {e}")
+            print(f"Query: {converted_query}")
+            print(f"Params: {params}")
             raise
         finally:
             conn.close()
