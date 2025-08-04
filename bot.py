@@ -382,8 +382,25 @@ async def help_slash(interaction: discord.Interaction):
             inline=False
         )
         
-        # Admin Commands (show to admins only) - Check if in guild first
-        if hasattr(interaction.user, 'guild_permissions') and interaction.user.guild_permissions.administrator:
+        # Admin Commands (show to admins and specific roles)
+        is_admin = False
+        
+        # Check if user is server owner
+        if interaction.guild and interaction.guild.owner_id == interaction.user.id:
+            is_admin = True
+        
+        # Check if user has administrator permissions
+        elif hasattr(interaction.user, 'guild_permissions') and interaction.user.guild_permissions.administrator:
+            is_admin = True
+        
+        # Check for specific admin roles (you can customize these role names)
+        elif interaction.guild and hasattr(interaction.user, 'roles'):
+            admin_role_names = ['Admin', 'Moderator', 'Bot Admin', 'Staff']  # Add your role names here
+            user_roles = [role.name for role in interaction.user.roles]
+            if any(role in admin_role_names for role in user_roles):
+                is_admin = True
+        
+        if is_admin:
             embed.add_field(
                 name="🔧 Admin Commands", 
                 value="🔹 `/give_tokens <user> [quantity]` - Give pack tokens to user\n🔹 `/debug_bot` - System diagnostics and troubleshooting",
