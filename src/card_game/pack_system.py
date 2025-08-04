@@ -21,28 +21,39 @@ class PackSystem:
     def add_pack_tokens(self, user_id: int, pack_type: str = 'standard', quantity: int = 1) -> bool:
         """Add pack tokens to user's inventory"""
         try:
+            print(f"[PACK_SYSTEM] Adding {quantity} tokens for user {user_id}, pack_type: {pack_type}")
+            print(f"[PACK_SYSTEM] Database type: {self.db.db_type}")
+            
             if self.db.db_type == 'postgresql':
+                # Use ? placeholders - they get converted to %s automatically
                 self.db.execute_query('''INSERT INTO user_packs (user_id, pack_type, quantity) 
-                                         VALUES (%s, %s, %s) 
+                                         VALUES (?, ?, ?) 
                                          ON CONFLICT (user_id, pack_type) 
-                                         DO UPDATE SET quantity = user_packs.quantity + %s''',
+                                         DO UPDATE SET quantity = user_packs.quantity + ?''',
                                       (user_id, pack_type, quantity, quantity))
+                print(f"[PACK_SYSTEM] PostgreSQL upsert executed")
             else:
                 # SQLite approach
                 existing = self.db.fetch_one('SELECT quantity FROM user_packs WHERE user_id = ? AND pack_type = ?', 
                                            (user_id, pack_type))
+                print(f"[PACK_SYSTEM] Existing tokens: {existing}")
                 
                 if existing:
                     new_quantity = existing[0] + quantity
                     self.db.execute_query('UPDATE user_packs SET quantity = ? WHERE user_id = ? AND pack_type = ?',
                                          (new_quantity, user_id, pack_type))
+                    print(f"[PACK_SYSTEM] Updated tokens: {existing[0]} -> {new_quantity}")
                 else:
                     self.db.execute_query('INSERT INTO user_packs (user_id, pack_type, quantity) VALUES (?, ?, ?)',
                                          (user_id, pack_type, quantity))
+                    print(f"[PACK_SYSTEM] Inserted new tokens: {quantity}")
             
+            print(f"[PACK_SYSTEM] Token addition successful")
             return True
         except Exception as e:
-            print(f"Error adding pack tokens: {e}")
+            print(f"[PACK_SYSTEM] Error adding pack tokens: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def get_user_pack_tokens(self, user_id: int) -> Dict[str, int]:

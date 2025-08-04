@@ -368,7 +368,7 @@ async def help_slash(interaction: discord.Interaction):
     """Show all available commands"""
     try:
         embed = discord.Embed(
-            title="🤖 VibeBot Commands v1.2.11", 
+            title="🤖 VibeBot Commands v1.2.13", 
             description="Your modular Discord bot with card games and XP systems!",
             color=0x00d4ff
         )
@@ -414,9 +414,9 @@ async def help_slash(interaction: discord.Interaction):
                 value="🔹 `/debug_bot` - System diagnostics and troubleshooting\n🔹 `/bot_stats` - View bot statistics\n🔹 `/reload_cards` - Reload card library\n🔹 `/list_config` - View all configuration settings",
                 inline=False
             )
-            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.11")
+            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.13")
         else:
-            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.11")
+            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.13")
         
         # Check if interaction has already been responded to
         if not interaction.response.is_done():
