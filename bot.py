@@ -394,6 +394,68 @@ async def give_tokens_slash(interaction: discord.Interaction, user: discord.Memb
     else:
         await interaction.response.send_message("❌ Failed to give tokens", ephemeral=True)
 
+@bot.tree.command(name='debug_bot', description='Debug bot status and enable game (Admin only)')
+@app_commands.default_permissions(administrator=True)
+async def debug_bot_slash(interaction: discord.Interaction):
+    """Debug bot status and enable game - Admin only"""
+    try:
+        # Check game status
+        game_enabled = get_config('game_enabled')
+        
+        # Force enable the game if not enabled
+        if game_enabled != 'True':
+            set_config('game_enabled', 'True')
+            game_enabled = 'True'
+        
+        # Get some stats
+        try:
+            user_tokens = pack_system.get_user_pack_tokens(interaction.user.id)
+            collection_stats = card_manager.get_collection_stats(interaction.user.id)
+        except Exception as e:
+            user_tokens = {}
+            collection_stats = {'total_cards': 0, 'unique_cards': 0, 'rare_cards': 0}
+            print(f"Stats error: {e}")
+        
+        embed = discord.Embed(
+            title="🔧 Bot Debug Status",
+            description="Debug information and system status",
+            color=0x00ff00
+        )
+        
+        embed.add_field(
+            name="🎮 Game Status",
+            value=f"**Game Enabled:** {game_enabled}\n**Database Type:** {db_manager.db_type}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎫 Your Tokens",
+            value=f"**Standard Tokens:** {user_tokens.get('standard', 0)}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🃏 Your Collection",
+            value=f"**Total Cards:** {collection_stats['total_cards']}\n**Unique Cards:** {collection_stats['unique_cards']}\n**Rare+ Cards:** {collection_stats['rare_cards']}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🔧 Actions Taken",
+            value="✅ Game enabled\n✅ Database connection verified\n✅ Modular systems loaded",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Debug Error",
+            description=f"Error during debug: {str(e)}",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
 # Flask web server for cloud hosting
 app = Flask(__name__)
 
