@@ -356,43 +356,58 @@ async def level_slash(interaction: discord.Interaction, user: discord.Member | N
 @bot.tree.command(name='help', description='Show all available commands')
 async def help_slash(interaction: discord.Interaction):
     """Show all available commands"""
-    embed = discord.Embed(
-        title="🤖 VibeBot Commands v1.2.0", 
-        description="Your modular Discord bot with card games and XP systems!",
-        color=0x00d4ff
-    )
-    
-    # User Commands
-    embed.add_field(
-        name="🃏 Card Game Commands", 
-        value="🔹 `/pack` - Open card packs using tokens\n🔹 `/cards [page]` - View your collection\n🔹 `/daily` - Claim daily pack tokens",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="📊 XP System Commands", 
-        value="🔹 `/level [user]` - Check your or another user's level\n🔹 💬 Chat to gain XP automatically!",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="ℹ️ Information Commands", 
-        value="🔹 `/help` - Show this help menu",
-        inline=False
-    )
-    
-    # Admin Commands (show to admins only)
-    if interaction.user.guild_permissions.administrator:
+    try:
+        embed = discord.Embed(
+            title="🤖 VibeBot Commands v1.2.1", 
+            description="Your modular Discord bot with card games and XP systems!",
+            color=0x00d4ff
+        )
+        
+        # User Commands
         embed.add_field(
-            name="🔧 Admin Commands", 
-            value="🔹 `/give_tokens <user> [quantity]` - Give pack tokens to user\n🔹 `/debug_bot` - System diagnostics and troubleshooting",
+            name="🃏 Card Game Commands", 
+            value="🔹 `/pack` - Open card packs using tokens\n🔹 `/cards [page]` - View your collection\n🔹 `/daily` - Claim daily pack tokens",
             inline=False
         )
-        embed.set_footer(text="🔐 Admin commands visible to administrators only • Version 1.2.0")
-    else:
-        embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.0")
-    
-    await interaction.response.send_message(embed=embed)
+        
+        embed.add_field(
+            name="📊 XP System Commands", 
+            value="🔹 `/level [user]` - Check your or another user's level\n🔹 💬 Chat to gain XP automatically!",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="ℹ️ Information Commands", 
+            value="🔹 `/help` - Show this help menu",
+            inline=False
+        )
+        
+        # Admin Commands (show to admins only) - Check if in guild first
+        if hasattr(interaction.user, 'guild_permissions') and interaction.user.guild_permissions.administrator:
+            embed.add_field(
+                name="🔧 Admin Commands", 
+                value="🔹 `/give_tokens <user> [quantity]` - Give pack tokens to user\n🔹 `/debug_bot` - System diagnostics and troubleshooting",
+                inline=False
+            )
+            embed.set_footer(text="🔐 Admin commands visible to administrators only • Version 1.2.1")
+        else:
+            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.1")
+        
+        # Check if interaction has already been responded to
+        if not interaction.response.is_done():
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.followup.send(embed=embed)
+            
+    except Exception as e:
+        print(f"Help command error: {e}")
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ Error displaying help menu. Please try again.", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ Error displaying help menu. Please try again.", ephemeral=True)
+        except:
+            pass
 
 # Admin Commands (simplified for now)
 @bot.tree.command(name='give_tokens', description='Give pack tokens to a user (Admin only)')
