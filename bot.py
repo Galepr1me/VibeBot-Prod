@@ -426,6 +426,101 @@ async def daily_slash(interaction: discord.Interaction):
     embed.set_footer(text="Use /cards to view your collection • Come back tomorrow for more rewards!")
     await interaction.response.send_message(embed=embed)
 
+@bot.tree.command(name='view', description='View a specific card with full details and ASCII art')
+@app_commands.describe(card_name='Name of the card to view')
+async def view_slash(interaction: discord.Interaction, card_name: str):
+    """View a specific card with full details and ASCII art"""
+    if get_config('game_enabled') != 'True':
+        await interaction.response.send_message("The card game is currently disabled.", ephemeral=True)
+        return
+    
+    try:
+        # Search for the card in the user's collection
+        user_collection = card_manager.get_user_collection(interaction.user.id)
+        
+        # Find the card (case-insensitive search)
+        found_card = None
+        for card_data in user_collection:
+            card_id, name, element, rarity, attack, health, cost, ability, ascii_art, quantity = card_data
+            if name.lower() == card_name.lower():
+                found_card = card_data
+                break
+        
+        if not found_card:
+            # Check if the card exists in the library but user doesn't own it
+            all_cards = card_library.get_all_cards()
+            library_card = None
+            for card in all_cards:
+                if card['name'].lower() == card_name.lower():
+                    library_card = card
+                    break
+            
+            if library_card:
+                embed = discord.Embed(
+                    title="❌ Card Not in Collection",
+                    description=f"You don't own **{library_card['name']}** yet!\n\nUse `/pack` to open packs and collect this card.",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                embed = discord.Embed(
+                    title="❌ Card Not Found",
+                    description=f"No card named **{card_name}** exists.\n\nUse `/cards` to see your collection.",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        # Display the card with full details
+        card_id, name, element, rarity, attack, health, cost, ability, ascii_art, quantity = found_card
+        
+        element_info = card_library.elements[element]
+        rarity_info = card_library.rarities[rarity]
+        
+        # Create embed with card details
+        embed = discord.Embed(
+            title=f"🃏 {name}",
+            description=f"{element_info['emoji']} **{element.title()}** • **{rarity.title()}**",
+            color=rarity_info['color']
+        )
+        
+        # Add card stats
+        embed.add_field(
+            name="⚔️ Combat Stats",
+            value=f"**Attack:** {attack}\n**Health:** {health}\n**Cost:** {cost}",
+            inline=True
+        )
+        
+        # Add ability
+        embed.add_field(
+            name="🎯 Ability",
+            value=ability if ability != 'None' else 'No special ability',
+            inline=True
+        )
+        
+        # Add collection info
+        embed.add_field(
+            name="📦 Collection",
+            value=f"**Owned:** {quantity}x\n**Rarity:** {rarity_info['drop_rate']}% drop rate",
+            inline=True
+        )
+        
+        # Add ASCII art if available
+        if ascii_art and ascii_art != 'None':
+            embed.add_field(
+                name="🎨 Card Art",
+                value=f"```\n{ascii_art}\n```",
+                inline=False
+            )
+        
+        embed.set_footer(text="Use /cards to browse your full collection")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"View card error: {e}")
+        await interaction.response.send_message("❌ Error viewing card. Please try again.", ephemeral=True)
+
 @bot.tree.command(name='level', description='Check your level or another user\'s level')
 @app_commands.describe(user='User to check level for (optional)')
 async def level_slash(interaction: discord.Interaction, user: discord.Member | None = None):
@@ -646,7 +741,7 @@ async def help_slash(interaction: discord.Interaction):
     """Show all available commands"""
     try:
         embed = discord.Embed(
-            title="🤖 VibeBot Commands v1.2.17", 
+            title="🤖 VibeBot Commands v1.2.18", 
             description="Your modular Discord bot with card games and XP systems!",
             color=0x00d4ff
         )
@@ -654,7 +749,7 @@ async def help_slash(interaction: discord.Interaction):
         # User Commands
         embed.add_field(
             name="🃏 Card Game Commands", 
-            value="🔹 `/pack` - Open card packs using tokens\n🔹 `/cards` - View your collection with navigation\n🔹 `/daily` - Claim daily pack tokens",
+            value="🔹 `/pack` - Open card packs using tokens\n🔹 `/cards` - View your collection with navigation\n🔹 `/view <card_name>` - View a specific card with ASCII art\n🔹 `/daily` - Claim daily pack tokens",
             inline=False
         )
         
@@ -692,9 +787,9 @@ async def help_slash(interaction: discord.Interaction):
                 value="🔹 `/debug_bot` - System diagnostics and troubleshooting\n🔹 `/bot_stats` - View bot statistics\n🔹 `/reload_cards` - Reload card library\n🔹 `/list_config` - View all configuration settings",
                 inline=False
             )
-            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.17")
+            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.18")
         else:
-            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.17")
+            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.18")
         
         # Check if interaction has already been responded to
         if not interaction.response.is_done():
