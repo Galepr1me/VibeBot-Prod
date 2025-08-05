@@ -443,39 +443,93 @@ async def level_slash(interaction: discord.Interaction, user: discord.Member | N
     
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name='leaderboard', description='View the XP leaderboard')
-@app_commands.describe(page='Page number to view (default: 1)')
-async def leaderboard_slash(interaction: discord.Interaction, page: int = 1):
-    """View the XP leaderboard"""
+@bot.tree.command(name='xp_table', description='View XP requirements for each level')
+@app_commands.describe(start_level='Starting level to display (default: 1)', levels='Number of levels to show (default: 20)')
+async def xp_table_slash(interaction: discord.Interaction, start_level: int = 1, levels: int = 20):
+    """View XP requirements for each level"""
     try:
-        # Get top users by XP
-        top_users = db_manager.fetch_all('''SELECT user_id, xp, level, username, display_name, total_messages 
-                                           FROM users 
-                                           WHERE xp > 0 
-                                           ORDER BY xp DESC 
-                                           LIMIT 50''')
+        # Validate inputs
+        start_level = max(1, start_level)
+        levels = max(1, min(levels, 50))  # Limit to 50 levels max
         
-        if not top_users:
-            embed = discord.Embed(
-                title="🏆 XP Leaderboard",
-                description="No users found with XP yet! Start chatting to gain XP!",
-                color=0x95a5a6
-            )
-            await interaction.response.send_message(embed=embed)
-            return
+        base_xp = int(get_config('level_multiplier') or '100')
+        scaling_factor = float(get_config('level_scaling_factor') or '1.2')
         
-        # Pagination
-        users_per_page = 10
-        total_pages = (len(top_users) + users_per_page - 1) // users_per_page
-        page = max(1, min(page, total_pages))
+        embed = discord.Embed(
+            title="📊 XP Level Requirements",
+            description=f"XP needed for levels {start_level} to {start_level + levels - 1}",
+            color=0x3498db
+        )
         
-        start_idx = (page - 1) * users_per_page
-        end_idx = start_idx + users_per_page
-        page_users = top_users[start_idx:end_idx]
+        # Calculate XP requirements
+        xp_table_text = ""
+        total_xp = 0
+        
+        # Calculate total XP up to start_level - 1
+        for level in range(1, start_level):
+            level_xp_requirement = int(base_xp * level * (scaling_factor ** (level - 1)))
+            total_xp += level_xp_requirement
+        
+        # Display the requested levels
+        for level in range(start_level, start_level + levels):
+            level_xp_requirement = int(base_xp * level * (scaling_factor ** (level - 1)))
+            total_xp += level_xp_requirement
+            
+            xp_table_text += f"**Level {level}:** {level_xp_requirement:,} XP (Total: {total_xp:,})\n"
+        
+        embed.add_field(
+            name="Level Requirements",
+            value=xp_table_text,
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📈 XP System Info",
+            value=f"**Base XP:** {base_xp}\n**Scaling Factor:** {scaling_factor}\n**XP per Message:** {get_config('xp_per_message') or '15'}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="💡 Tips",
+            value="• XP requirements increase exponentially\n• Chat regularly to level up faster\n• Use `/level` to check your progress",
+            inline=True
+        )
+        
+        embed.set_footer(text="💬 Keep chatting to earn XP and level up!")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"XP table error: {e}")
+        await interaction.response.send_message("❌ Error displaying XP table. Please try again.", ephemeral=True)
+
+# Leaderboard View with Navigation Buttons
+class LeaderboardView(discord.ui.View):
+    def __init__(self, top_users: list):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.top_users = top_users
+        self.current_page = 1
+        self.users_per_page = 10
+        self.total_pages = (len(top_users) + self.users_per_page - 1) // self.users_per_page
+        
+        # Update button states
+        self.update_buttons()
+    
+    def update_buttons(self):
+        # Update button states based on current page
+        self.first_page.disabled = (self.current_page == 1)
+        self.prev_page.disabled = (self.current_page == 1)
+        self.next_page.disabled = (self.current_page == self.total_pages)
+        self.last_page.disabled = (self.current_page == self.total_pages)
+    
+    def create_embed(self):
+        start_idx = (self.current_page - 1) * self.users_per_page
+        end_idx = start_idx + self.users_per_page
+        page_users = self.top_users[start_idx:end_idx]
         
         embed = discord.Embed(
             title="🏆 XP Leaderboard",
-            description=f"**Page {page}/{total_pages}** • Top {len(top_users)} users",
+            description=f"**Page {self.current_page}/{self.total_pages}** • Top {len(self.top_users)} users",
             color=0xffd700
         )
         
@@ -516,9 +570,72 @@ async def leaderboard_slash(interaction: discord.Interaction, page: int = 1):
             inline=False
         )
         
-        embed.set_footer(text=f"💬 Chat to gain XP and climb the leaderboard! • Page {page}/{total_pages}")
+        embed.set_footer(text=f"💬 Chat to gain XP and climb the leaderboard! • Page {self.current_page}/{self.total_pages}")
+        return embed
+    
+    @discord.ui.button(label='⏪', style=discord.ButtonStyle.secondary)
+    async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = 1
+        self.update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label='◀️', style=discord.ButtonStyle.primary)
+    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = max(1, self.current_page - 1)
+        self.update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label='▶️', style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = min(self.total_pages, self.current_page + 1)
+        self.update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label='⏩', style=discord.ButtonStyle.secondary)
+    async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = self.total_pages
+        self.update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label='🗑️', style=discord.ButtonStyle.danger)
+    async def close_view(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🏆 Leaderboard Closed",
+            description="Leaderboard view has been closed. Use `/leaderboard` to view again.",
+            color=0x95a5a6
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+        self.stop()
+
+@bot.tree.command(name='leaderboard', description='View the XP leaderboard with navigation')
+async def leaderboard_slash(interaction: discord.Interaction):
+    """View the XP leaderboard with navigation buttons"""
+    try:
+        # Get top users by XP
+        top_users = db_manager.fetch_all('''SELECT user_id, xp, level, username, display_name, total_messages 
+                                           FROM users 
+                                           WHERE xp > 0 
+                                           ORDER BY xp DESC 
+                                           LIMIT 50''')
         
-        await interaction.response.send_message(embed=embed)
+        if not top_users:
+            embed = discord.Embed(
+                title="🏆 XP Leaderboard",
+                description="No users found with XP yet! Start chatting to gain XP!",
+                color=0x95a5a6
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+        
+        # Create the view with navigation buttons
+        view = LeaderboardView(top_users)
+        embed = view.create_embed()
+        
+        await interaction.response.send_message(embed=embed, view=view)
         
     except Exception as e:
         print(f"Leaderboard error: {e}")
@@ -529,7 +646,7 @@ async def help_slash(interaction: discord.Interaction):
     """Show all available commands"""
     try:
         embed = discord.Embed(
-            title="🤖 VibeBot Commands v1.2.15", 
+            title="🤖 VibeBot Commands v1.2.16", 
             description="Your modular Discord bot with card games and XP systems!",
             color=0x00d4ff
         )
@@ -543,7 +660,7 @@ async def help_slash(interaction: discord.Interaction):
         
         embed.add_field(
             name="📊 XP System Commands", 
-            value="🔹 `/level [user]` - Check your or another user's level\n🔹 `/leaderboard [page]` - View the XP leaderboard\n🔹 💬 Chat to gain XP automatically!",
+            value="🔹 `/level [user]` - Check your or another user's level\n🔹 `/leaderboard` - View the XP leaderboard with navigation\n🔹 `/xp_table [start] [levels]` - View XP requirements for levels\n🔹 💬 Chat to gain XP automatically!",
             inline=False
         )
         
@@ -575,9 +692,9 @@ async def help_slash(interaction: discord.Interaction):
                 value="🔹 `/debug_bot` - System diagnostics and troubleshooting\n🔹 `/bot_stats` - View bot statistics\n🔹 `/reload_cards` - Reload card library\n🔹 `/list_config` - View all configuration settings",
                 inline=False
             )
-            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.15")
+            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.16")
         else:
-            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.15")
+            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.16")
         
         # Check if interaction has already been responded to
         if not interaction.response.is_done():
