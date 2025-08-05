@@ -222,10 +222,124 @@ async def pack_slash(interaction: discord.Interaction):
     embed.set_footer(text="Use /cards to view your full collection • Use /daily for more tokens!")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name='cards', description='View your card collection')
-@app_commands.describe(page='Page number to view (default: 1)')
-async def cards_slash(interaction: discord.Interaction, page: int = 1):
-    """View your card collection"""
+# Card Collection View with Navigation Buttons
+class CardCollectionView(discord.ui.View):
+    def __init__(self, user_id: int, collection: list, stats: dict):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.user_id = user_id
+        self.collection = collection
+        self.stats = stats
+        self.current_page = 1
+        self.cards_per_page = 5
+        self.total_pages = (len(collection) + self.cards_per_page - 1) // self.cards_per_page
+        
+        # Update button states
+        self.update_buttons()
+    
+    def update_buttons(self):
+        # Update button states based on current page
+        self.first_page.disabled = (self.current_page == 1)
+        self.prev_page.disabled = (self.current_page == 1)
+        self.next_page.disabled = (self.current_page == self.total_pages)
+        self.last_page.disabled = (self.current_page == self.total_pages)
+    
+    def create_embed(self):
+        start_idx = (self.current_page - 1) * self.cards_per_page
+        end_idx = start_idx + self.cards_per_page
+        page_cards = self.collection[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="🃏 Your Card Collection", 
+            description=f"**Page {self.current_page}/{self.total_pages}** • Showing {len(page_cards)} of {len(self.collection)} cards",
+            color=0x3498db
+        )
+        
+        # Add collection stats
+        embed.add_field(
+            name="📊 Collection Stats", 
+            value=f"📦 **{self.stats['total_cards']}** total cards\n🎴 **{self.stats['unique_cards']}** unique cards\n💎 **{self.stats['rare_cards']}** rare+ cards", 
+            inline=True
+        )
+        
+        # Add cards on this page
+        for card_data in page_cards:
+            card_id, name, element, rarity, attack, health, cost, ability, ascii_art, quantity = card_data
+            
+            element_info = card_library.elements[element]
+            quantity_text = f" x{quantity}" if quantity > 1 else ""
+            
+            embed.add_field(
+                name=f"{name}{quantity_text}", 
+                value=f"{element_info['emoji']} {element.title()} • {rarity.title()}\n"
+                      f"⚔️ {attack} ATK • ❤️ {health} HP • 💎 {cost} Cost\n"
+                      f"🎯 {ability if ability != 'None' else 'No special ability'}",
+                inline=False
+            )
+        
+        embed.set_footer(text="Use the buttons below to navigate • Use /pack to get more cards")
+        return embed
+    
+    @discord.ui.button(label='⏪', style=discord.ButtonStyle.secondary)
+    async def first_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You can only navigate your own collection!", ephemeral=True)
+            return
+        
+        self.current_page = 1
+        self.update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label='◀️', style=discord.ButtonStyle.primary)
+    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You can only navigate your own collection!", ephemeral=True)
+            return
+        
+        self.current_page = max(1, self.current_page - 1)
+        self.update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label='▶️', style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You can only navigate your own collection!", ephemeral=True)
+            return
+        
+        self.current_page = min(self.total_pages, self.current_page + 1)
+        self.update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label='⏩', style=discord.ButtonStyle.secondary)
+    async def last_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You can only navigate your own collection!", ephemeral=True)
+            return
+        
+        self.current_page = self.total_pages
+        self.update_buttons()
+        embed = self.create_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label='🗑️', style=discord.ButtonStyle.danger)
+    async def close_view(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You can only close your own collection!", ephemeral=True)
+            return
+        
+        embed = discord.Embed(
+            title="🃏 Card Collection Closed",
+            description="Collection view has been closed. Use `/cards` to view again.",
+            color=0x95a5a6
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+        self.stop()
+
+@bot.tree.command(name='cards', description='View your card collection with navigation')
+async def cards_slash(interaction: discord.Interaction):
+    """View your card collection with navigation buttons"""
     if get_config('game_enabled') != 'True':
         await interaction.response.send_message("The card game is currently disabled.", ephemeral=True)
         return
@@ -250,45 +364,11 @@ async def cards_slash(interaction: discord.Interaction, page: int = 1):
     # Get collection stats using modular system
     stats = card_manager.get_collection_stats(interaction.user.id)
     
-    # Pagination
-    cards_per_page = 5
-    total_pages = (len(collection) + cards_per_page - 1) // cards_per_page
-    page = max(1, min(page, total_pages))
+    # Create the view with navigation buttons
+    view = CardCollectionView(interaction.user.id, collection, stats)
+    embed = view.create_embed()
     
-    start_idx = (page - 1) * cards_per_page
-    end_idx = start_idx + cards_per_page
-    page_cards = collection[start_idx:end_idx]
-    
-    embed = discord.Embed(
-        title="🃏 Your Card Collection", 
-        description=f"**Page {page}/{total_pages}** • Showing {len(page_cards)} cards",
-        color=0x3498db
-    )
-    
-    # Add collection stats
-    embed.add_field(
-        name="📊 Collection Stats", 
-        value=f"📦 **{stats['total_cards']}** total cards\n🎴 **{stats['unique_cards']}** unique cards\n💎 **{stats['rare_cards']}** rare+ cards", 
-        inline=True
-    )
-    
-    # Add cards on this page
-    for card_data in page_cards:
-        card_id, name, element, rarity, attack, health, cost, ability, ascii_art, quantity = card_data
-        
-        element_info = card_library.elements[element]
-        quantity_text = f" x{quantity}" if quantity > 1 else ""
-        
-        embed.add_field(
-            name=f"{name}{quantity_text}", 
-            value=f"{element_info['emoji']} {element.title()} • {rarity.title()}\n"
-                  f"⚔️ {attack} ATK • ❤️ {health} HP • 💎 {cost} Cost\n"
-                  f"🎯 {ability if ability != 'None' else 'No special ability'}",
-            inline=False
-        )
-    
-    embed.set_footer(text="Use /pack to get more cards")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, view=view)
 
 @bot.tree.command(name='daily', description='Claim your daily pack tokens')
 async def daily_slash(interaction: discord.Interaction):
@@ -363,12 +443,93 @@ async def level_slash(interaction: discord.Interaction, user: discord.Member | N
     
     await interaction.response.send_message(embed=embed)
 
+@bot.tree.command(name='leaderboard', description='View the XP leaderboard')
+@app_commands.describe(page='Page number to view (default: 1)')
+async def leaderboard_slash(interaction: discord.Interaction, page: int = 1):
+    """View the XP leaderboard"""
+    try:
+        # Get top users by XP
+        top_users = db_manager.fetch_all('''SELECT user_id, xp, level, username, display_name, total_messages 
+                                           FROM users 
+                                           WHERE xp > 0 
+                                           ORDER BY xp DESC 
+                                           LIMIT 50''')
+        
+        if not top_users:
+            embed = discord.Embed(
+                title="🏆 XP Leaderboard",
+                description="No users found with XP yet! Start chatting to gain XP!",
+                color=0x95a5a6
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+        
+        # Pagination
+        users_per_page = 10
+        total_pages = (len(top_users) + users_per_page - 1) // users_per_page
+        page = max(1, min(page, total_pages))
+        
+        start_idx = (page - 1) * users_per_page
+        end_idx = start_idx + users_per_page
+        page_users = top_users[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="🏆 XP Leaderboard",
+            description=f"**Page {page}/{total_pages}** • Top {len(top_users)} users",
+            color=0xffd700
+        )
+        
+        leaderboard_text = ""
+        for i, user_data in enumerate(page_users, start=start_idx + 1):
+            user_id, xp, level, username, display_name, total_messages = user_data
+            
+            # Try to get the user from Discord
+            try:
+                discord_user = bot.get_user(user_id)
+                if discord_user:
+                    user_name = discord_user.display_name
+                elif display_name:
+                    user_name = display_name
+                elif username:
+                    user_name = username
+                else:
+                    user_name = f"User {user_id}"
+            except:
+                user_name = display_name or username or f"User {user_id}"
+            
+            # Add medal emojis for top 3
+            if i == 1:
+                medal = "🥇"
+            elif i == 2:
+                medal = "🥈"
+            elif i == 3:
+                medal = "🥉"
+            else:
+                medal = f"**{i}.**"
+            
+            leaderboard_text += f"{medal} **{user_name}**\n"
+            leaderboard_text += f"    📊 Level {level} • {xp:,} XP • {total_messages} messages\n\n"
+        
+        embed.add_field(
+            name="Rankings",
+            value=leaderboard_text,
+            inline=False
+        )
+        
+        embed.set_footer(text=f"💬 Chat to gain XP and climb the leaderboard! • Page {page}/{total_pages}")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"Leaderboard error: {e}")
+        await interaction.response.send_message("❌ Error loading leaderboard. Please try again.", ephemeral=True)
+
 @bot.tree.command(name='help', description='Show all available commands')
 async def help_slash(interaction: discord.Interaction):
     """Show all available commands"""
     try:
         embed = discord.Embed(
-            title="🤖 VibeBot Commands v1.2.14", 
+            title="🤖 VibeBot Commands v1.2.15", 
             description="Your modular Discord bot with card games and XP systems!",
             color=0x00d4ff
         )
@@ -376,13 +537,13 @@ async def help_slash(interaction: discord.Interaction):
         # User Commands
         embed.add_field(
             name="🃏 Card Game Commands", 
-            value="🔹 `/pack` - Open card packs using tokens\n🔹 `/cards [page]` - View your collection\n🔹 `/daily` - Claim daily pack tokens",
+            value="🔹 `/pack` - Open card packs using tokens\n🔹 `/cards` - View your collection with navigation\n🔹 `/daily` - Claim daily pack tokens",
             inline=False
         )
         
         embed.add_field(
             name="📊 XP System Commands", 
-            value="🔹 `/level [user]` - Check your or another user's level\n🔹 💬 Chat to gain XP automatically!",
+            value="🔹 `/level [user]` - Check your or another user's level\n🔹 `/leaderboard [page]` - View the XP leaderboard\n🔹 💬 Chat to gain XP automatically!",
             inline=False
         )
         
@@ -414,9 +575,9 @@ async def help_slash(interaction: discord.Interaction):
                 value="🔹 `/debug_bot` - System diagnostics and troubleshooting\n🔹 `/bot_stats` - View bot statistics\n🔹 `/reload_cards` - Reload card library\n🔹 `/list_config` - View all configuration settings",
                 inline=False
             )
-            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.14")
+            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.15")
         else:
-            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.14")
+            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.15")
         
         # Check if interaction has already been responded to
         if not interaction.response.is_done():
