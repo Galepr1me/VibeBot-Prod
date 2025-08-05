@@ -15,6 +15,7 @@ from src.database.connection import db_manager
 from src.card_game.card_library import CardLibrary
 from src.card_game.card_manager import card_manager
 from src.card_game.pack_system import pack_system
+from src.card_game.abilities import ability_system
 
 # Bot setup
 intents = discord.Intents.default()
@@ -1108,6 +1109,113 @@ async def list_config_slash(interaction: discord.Interaction):
         
     except Exception as e:
         await interaction.response.send_message(f"❌ Error listing config: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name='test_ability', description='Test a card ability (Staff only)')
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(card_name='Name of the card to test ability for')
+async def test_ability_slash(interaction: discord.Interaction, card_name: str):
+    """Test a card ability - Staff only"""
+    if get_config('game_enabled') != 'True':
+        await interaction.response.send_message("The card game is currently disabled.", ephemeral=True)
+        return
+    
+    try:
+        # Find the card in the library
+        card = card_library.get_card_by_name(card_name)
+        if not card:
+            embed = discord.Embed(
+                title="❌ Card Not Found",
+                description=f"No card named **{card_name}** exists in the library.",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        # Get the ability
+        ability_text = card['ability']
+        if ability_text == 'None' or not ability_text:
+            embed = discord.Embed(
+                title="❌ No Ability",
+                description=f"**{card['name']}** has no special ability to test.",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        # Create mock card data for testing
+        caster_data = {
+            'card_id': 1,
+            'name': card['name'],
+            'attack': card['attack'],
+            'health': card['health'],
+            'element': card['element']
+        }
+        
+        target_data = {
+            'card_id': 2,
+            'name': 'Test Target',
+            'attack': 3,
+            'health': 3,
+            'element': 'fire'
+        }
+        
+        # Test the ability
+        print(f"[TEST_ABILITY] Testing ability: {ability_text}")
+        result = ability_system.execute_ability(ability_text, caster_data, target_data)
+        print(f"[TEST_ABILITY] Result: {result}")
+        
+        # Create response embed
+        embed = discord.Embed(
+            title=f"🧪 Ability Test: {card['name']}",
+            description=f"Testing ability: **{ability_text}**",
+            color=0x00ff00 if result['success'] else 0xff0000
+        )
+        
+        # Add card info
+        element_info = card_library.elements[card['element']]
+        embed.add_field(
+            name="🃏 Card Info",
+            value=f"{element_info['emoji']} **{card['name']}**\n⚔️ {card['attack']} ATK • ❤️ {card['health']} HP • 💎 {card['cost']} Cost",
+            inline=True
+        )
+        
+        # Add ability details
+        if result['success']:
+            ability_effect = ability_system.get_ability_effect(ability_text)
+            embed.add_field(
+                name="✨ Ability Details",
+                value=f"**Type:** {ability_effect.effect_type}\n**Value:** {ability_effect.value}\n**Target:** {ability_effect.target}\n**Trigger:** {ability_effect.condition}",
+                inline=True
+            )
+            
+            # Add execution result
+            execution_result = result['result']
+            if execution_result.get('applied', False):
+                result_text = execution_result.get('message', 'Effect applied successfully')
+                embed.add_field(
+                    name="🎯 Test Result",
+                    value=f"✅ **Success!**\n{result_text}",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="🎯 Test Result",
+                    value=f"❌ **Failed**\n{execution_result.get('message', 'Unknown error')}",
+                    inline=False
+                )
+        else:
+            embed.add_field(
+                name="❌ Error",
+                value=result['message'],
+                inline=False
+            )
+        
+        embed.set_footer(text="This is a test execution - no actual game effects applied")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        print(f"Test ability error: {e}")
+        await interaction.response.send_message(f"❌ Error testing ability: {str(e)}", ephemeral=True)
 
 # Flask web server for cloud hosting
 app = Flask(__name__)
