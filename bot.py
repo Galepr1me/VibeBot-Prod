@@ -17,6 +17,7 @@ from src.card_game.card_manager import card_manager
 from src.card_game.pack_system import pack_system
 from src.card_game.abilities import ability_system
 from src.card_game.battle_system import battle_manager
+from src.card_game.battle_ui import CardSelectionView, BattleView
 
 # Bot setup
 intents = discord.Intents.default()
@@ -743,8 +744,8 @@ async def help_slash(interaction: discord.Interaction):
     """Show all available commands"""
     try:
         embed = discord.Embed(
-            title="🤖 VibeBot Commands v1.2.20", 
-            description="Your modular Discord bot with card games and XP systems!",
+            title="🤖 VibeBot Commands v1.2.22", 
+            description="Your modular Discord bot with card games and interactive battles!",
             color=0x00d4ff
         )
         
@@ -752,6 +753,12 @@ async def help_slash(interaction: discord.Interaction):
         embed.add_field(
             name="🃏 Card Game Commands", 
             value="🔹 `/pack` - Open card packs using tokens\n🔹 `/cards` - View your collection with navigation\n🔹 `/view <card_name>` - View a specific card with ASCII art\n🔹 `/daily` - Claim daily pack tokens",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="⚔️ Battle System Commands", 
+            value="🔹 `/challenge @user` - Challenge another player to battle\n🔹 `/battle_select` - Interactive card selection for battles\n🔹 `/battle_attack` - Attack during your turn (or use buttons!)\n🔹 `/battle_status` - View detailed battle information\n🔹 `/battle_forfeit` - Surrender your current battle",
             inline=False
         )
         
@@ -1513,10 +1520,9 @@ async def challenge_slash(interaction: discord.Interaction, opponent: discord.Me
         print(f"Challenge error: {e}")
         await interaction.response.send_message("❌ Error creating battle challenge. Please try again.", ephemeral=True)
 
-@bot.tree.command(name='battle_select', description='Select a card for your current battle')
-@app_commands.describe(card_name='Name of the card to use in battle')
-async def battle_select_slash(interaction: discord.Interaction, card_name: str):
-    """Select a card for your current battle"""
+@bot.tree.command(name='battle_select', description='Select a card for your current battle using interactive UI')
+async def battle_select_slash(interaction: discord.Interaction):
+    """Select a card for your current battle using interactive UI"""
     if get_config('game_enabled') != 'True':
         await interaction.response.send_message("The card game is currently disabled.", ephemeral=True)
         return
@@ -1535,87 +1541,23 @@ async def battle_select_slash(interaction: discord.Interaction, card_name: str):
             await interaction.response.send_message(f"❌ You have already selected **{player_card.name}** for this battle!", ephemeral=True)
             return
         
-        # Find the card in player's collection
+        # Get user's collection
         user_collection = card_manager.get_user_collection(interaction.user.id)
-        selected_card = None
         
-        for card_data in user_collection:
-            card_id, name, element, rarity, attack, health, cost, ability, ascii_art, quantity = card_data
-            if name.lower() == card_name.lower():
-                selected_card = {
-                    'card_id': card_id,
-                    'name': name,
-                    'element': element,
-                    'rarity': rarity,
-                    'attack': attack,
-                    'health': health,
-                    'cost': cost,
-                    'ability': ability,
-                    'ascii': ascii_art
-                }
-                break
-        
-        if not selected_card:
-            await interaction.response.send_message(f"❌ You don't own a card named **{card_name}**! Use `/cards` to see your collection.", ephemeral=True)
+        if not user_collection:
+            await interaction.response.send_message("❌ You don't have any cards! Use `/pack` to get cards first.", ephemeral=True)
             return
         
-        # Add card to battle
-        success = battle.add_card(interaction.user.id, selected_card)
+        # Create interactive card selection view
+        selection_view = CardSelectionView(interaction.user.id, battle.battle_id, user_collection)
+        embed = selection_view.create_selection_embed()
         
-        if not success:
-            await interaction.response.send_message("❌ Failed to select card for battle. Please try again.", ephemeral=True)
-            return
-        
-        # Save battle state
-        battle_manager.save_battle(battle)
-        
-        # Create response embed
-        element_info = card_library.elements[selected_card['element']]
-        embed = discord.Embed(
-            title="✅ Card Selected!",
-            description=f"You have selected **{selected_card['name']}** for battle!",
-            color=0x00ff00
-        )
-        
-        embed.add_field(
-            name="🃏 Your Battle Card",
-            value=f"{element_info['emoji']} **{selected_card['name']}**\n⚔️ {selected_card['attack']} ATK • ❤️ {selected_card['health']} HP\n🎯 {selected_card['ability']}",
-            inline=True
-        )
-        
-        # Check if battle is ready to start
-        if battle.state.value == 'in_progress':
-            opponent_id = battle.get_opponent_id(interaction.user.id)
-            opponent_card = battle.get_opponent_card(interaction.user.id)
-            
-            embed.add_field(
-                name="⚔️ Battle Ready!",
-                value=f"Both players have selected cards!\n**Opponent:** {opponent_card.name}\n\nBattle begins now!",
-                inline=False
-            )
-            
-            embed.add_field(
-                name="🎮 Next Steps",
-                value=f"Use `/battle_attack` to attack when it's your turn!\nUse `/battle_status` to check the current battle state.",
-                inline=False
-            )
-            
-            embed.set_footer(text=f"Battle ID: {battle.battle_id} • Your turn: {'Yes' if battle.current_turn == interaction.user.id else 'No'}")
-        else:
-            embed.add_field(
-                name="⏳ Waiting for Opponent",
-                value="Waiting for your opponent to select their card...",
-                inline=False
-            )
-            
-            embed.set_footer(text=f"Battle ID: {battle.battle_id}")
-        
-        await interaction.response.send_message(embed=embed)
-        print(f"[BATTLE_SELECT] Player {interaction.user.id} selected {selected_card['name']} for battle {battle.battle_id}")
+        await interaction.response.send_message(embed=embed, view=selection_view, ephemeral=True)
+        print(f"[BATTLE_SELECT] Interactive card selection shown for user {interaction.user.id} in battle {battle.battle_id}")
         
     except Exception as e:
         print(f"Battle select error: {e}")
-        await interaction.response.send_message("❌ Error selecting card for battle. Please try again.", ephemeral=True)
+        await interaction.response.send_message("❌ Error showing card selection. Please try again.", ephemeral=True)
 
 @bot.tree.command(name='battle_attack', description='Attack your opponent in the current battle')
 async def battle_attack_slash(interaction: discord.Interaction):
