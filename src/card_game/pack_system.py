@@ -118,7 +118,16 @@ class PackSystem:
                     card_data = self.card_manager.get_card_by_name(selected_card['name'])
                     if card_data:
                         card_id = card_data[0]  # First column is card_id
-                        self.card_manager.add_card_to_collection(user_id, card_id, 1)
+                        success = self.card_manager.add_card_to_collection(user_id, card_id, 1)
+                        if not success:
+                            print(f"[PACK_SYSTEM] Failed to add card {selected_card['name']} to collection for user {user_id}")
+                    else:
+                        print(f"[PACK_SYSTEM] Card {selected_card['name']} not found in database! This card will not be added to collection.")
+                        print(f"[PACK_SYSTEM] Available cards in database:")
+                        # Debug: List first few cards in database
+                        debug_cards = self.db.fetch_all('SELECT name FROM cards LIMIT 10')
+                        for debug_card in debug_cards:
+                            print(f"[PACK_SYSTEM] - {debug_card[0]}")
             
             return pack_cards
             

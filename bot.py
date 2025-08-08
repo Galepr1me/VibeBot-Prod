@@ -743,7 +743,7 @@ async def help_slash(interaction: discord.Interaction):
     """Show all available commands"""
     try:
         embed = discord.Embed(
-            title="🤖 VibeBot Commands v1.2.19", 
+            title="🤖 VibeBot Commands v1.2.20", 
             description="Your modular Discord bot with card games and XP systems!",
             color=0x00d4ff
         )
@@ -1217,6 +1217,165 @@ async def test_ability_slash(interaction: discord.Interaction, card_name: str):
     except Exception as e:
         print(f"Test ability error: {e}")
         await interaction.response.send_message(f"❌ Error testing ability: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name='fix_cards', description='Fix card database issues (Staff only)')
+@app_commands.default_permissions(administrator=True)
+async def fix_cards_slash(interaction: discord.Interaction):
+    """Fix card database issues - Staff only"""
+    try:
+        await interaction.response.defer(ephemeral=True)
+        
+        # Check current card count in database
+        card_count_result = db_manager.fetch_one('SELECT COUNT(*) FROM cards')
+        current_card_count = card_count_result[0] if card_count_result else 0
+        
+        # Get expected card count from library
+        expected_card_count = len(card_library.get_all_cards())
+        
+        embed = discord.Embed(
+            title="🔧 Card Database Diagnostics",
+            description="Checking and fixing card database issues...",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="📊 Current Status",
+            value=f"**Cards in Database:** {current_card_count}\n**Cards in Library:** {expected_card_count}\n**Database Type:** {db_manager.db_type}",
+            inline=False
+        )
+        
+        # If card counts don't match, repopulate
+        if current_card_count != expected_card_count:
+            embed.add_field(
+                name="🔄 Fixing Database",
+                value="Card count mismatch detected. Repopulating card database...",
+                inline=False
+            )
+            
+            # Clear existing cards and repopulate
+            db_manager.execute_query('DELETE FROM cards')
+            
+            # Repopulate cards
+            for card in card_library.get_all_cards():
+                if db_manager.db_type == 'postgresql':
+                    db_manager.execute_query('''INSERT INTO cards (name, element, rarity, attack, health, cost, ability, ascii_art) 
+                                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+                                            (card['name'], card['element'], card['rarity'], card['attack'], 
+                                             card['health'], card['cost'], card['ability'], card['ascii']))
+                else:
+                    db_manager.execute_query('''INSERT INTO cards (name, element, rarity, attack, health, cost, ability, ascii_art) 
+                                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                                            (card['name'], card['element'], card['rarity'], card['attack'], 
+                                             card['health'], card['cost'], card['ability'], card['ascii']))
+            
+            # Verify fix
+            new_card_count_result = db_manager.fetch_one('SELECT COUNT(*) FROM cards')
+            new_card_count = new_card_count_result[0] if new_card_count_result else 0
+            
+            embed.add_field(
+                name="✅ Fix Complete",
+                value=f"**New Card Count:** {new_card_count}\n**Status:** {'✅ Fixed' if new_card_count == expected_card_count else '❌ Still Issues'}",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="✅ Database OK",
+                value="Card database is properly populated. No fixes needed.",
+                inline=False
+            )
+        
+        # Show sample cards
+        sample_cards = db_manager.fetch_all('SELECT name, rarity FROM cards ORDER BY rarity DESC, name LIMIT 5')
+        if sample_cards:
+            sample_text = "\n".join([f"• {name} ({rarity})" for name, rarity in sample_cards])
+            embed.add_field(
+                name="🃏 Sample Cards in Database",
+                value=sample_text,
+                inline=False
+            )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Fix Cards Error",
+            description=f"Error fixing card database: {str(e)}",
+            color=0xff0000
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
+
+@bot.tree.command(name='debug_collection', description='Debug user collection issues (Staff only)')
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(user='User to debug collection for')
+async def debug_collection_slash(interaction: discord.Interaction, user: discord.Member):
+    """Debug user collection issues - Staff only"""
+    try:
+        # Get user's collection from database
+        collection = card_manager.get_user_collection(user.id)
+        
+        # Get user's pack tokens
+        tokens = pack_system.get_user_pack_tokens(user.id)
+        
+        # Get collection stats
+        stats = card_manager.get_collection_stats(user.id)
+        
+        embed = discord.Embed(
+            title=f"🔍 Collection Debug: {user.display_name}",
+            description="Detailed collection diagnostics",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="📊 Collection Stats",
+            value=f"**Total Cards:** {stats['total_cards']}\n**Unique Cards:** {stats['unique_cards']}\n**Rare+ Cards:** {stats['rare_cards']}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎫 Pack Tokens",
+            value=f"**Standard Tokens:** {tokens.get('standard', 0)}",
+            inline=True
+        )
+        
+        # Show recent cards in collection
+        if collection:
+            recent_cards = collection[:10]  # First 10 cards
+            card_list = []
+            for card_data in recent_cards:
+                card_id, name, element, rarity, attack, health, cost, ability, ascii_art, quantity = card_data
+                card_list.append(f"• {name} x{quantity} ({rarity})")
+            
+            embed.add_field(
+                name="🃏 Recent Cards (First 10)",
+                value="\n".join(card_list) if card_list else "No cards found",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="🃏 Collection Status",
+                value="❌ No cards found in collection",
+                inline=False
+            )
+        
+        # Check for database issues
+        total_cards_in_db = db_manager.fetch_one('SELECT COUNT(*) FROM cards')[0]
+        user_card_entries = db_manager.fetch_one('SELECT COUNT(*) FROM user_cards WHERE user_id = ?', (user.id,))[0]
+        
+        embed.add_field(
+            name="🔧 Database Info",
+            value=f"**Total Cards in DB:** {total_cards_in_db}\n**User Card Entries:** {user_card_entries}",
+            inline=True
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Debug Collection Error",
+            description=f"Error debugging collection: {str(e)}",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 @bot.tree.command(name='challenge', description='Challenge another player to a card battle')
 @app_commands.describe(opponent='Player to challenge to a battle')
