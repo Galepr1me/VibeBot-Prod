@@ -1248,25 +1248,78 @@ async def fix_cards_slash(interaction: discord.Interaction):
         if current_card_count != expected_card_count:
             embed.add_field(
                 name="🔄 Fixing Database",
-                value="Card count mismatch detected. Repopulating card database...",
+                value="Card count mismatch detected. Safely repopulating card database...",
                 inline=False
             )
             
-            # Clear existing cards and repopulate
-            db_manager.execute_query('DELETE FROM cards')
-            
-            # Repopulate cards
-            for card in card_library.get_all_cards():
+            # Safely handle foreign key constraints
+            try:
+                # First, disable foreign key checks if possible
                 if db_manager.db_type == 'postgresql':
-                    db_manager.execute_query('''INSERT INTO cards (name, element, rarity, attack, health, cost, ability, ascii_art) 
-                                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
-                                            (card['name'], card['element'], card['rarity'], card['attack'], 
-                                             card['health'], card['cost'], card['ability'], card['ascii']))
+                    # For PostgreSQL, we need to be more careful with foreign keys
+                    # Instead of deleting, let's add missing cards
+                    existing_cards = db_manager.fetch_all('SELECT name FROM cards')
+                    existing_card_names = {card[0] for card in existing_cards}
+                    
+                    # Add any missing cards
+                    for card in card_library.get_all_cards():
+                        if card['name'] not in existing_card_names:
+                            db_manager.execute_query('''INSERT INTO cards (name, element, rarity, attack, health, cost, ability, ascii_art) 
+                                                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+                                                    (card['name'], card['element'], card['rarity'], card['attack'], 
+                                                     card['health'], card['cost'], card['ability'], card['ascii']))
                 else:
-                    db_manager.execute_query('''INSERT INTO cards (name, element, rarity, attack, health, cost, ability, ascii_art) 
-                                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                                            (card['name'], card['element'], card['rarity'], card['attack'], 
-                                             card['health'], card['cost'], card['ability'], card['ascii']))
+                    # For SQLite, temporarily disable foreign keys
+                    db_manager.execute_query('PRAGMA foreign_keys = OFF')
+                    
+                    # Clear existing cards and repopulate
+                    db_manager.execute_query('DELETE FROM cards')
+                    
+                    # Repopulate cards
+                    for card in card_library.get_all_cards():
+                        db_manager.execute_query('''INSERT INTO cards (name, element, rarity, attack, health, cost, ability, ascii_art) 
+                                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                                                (card['name'], card['element'], card['rarity'], card['attack'], 
+                                                 card['health'], card['cost'], card['ability'], card['ascii']))
+                    
+                    # Re-enable foreign keys
+                    db_manager.execute_query('PRAGMA foreign_keys = ON')
+                    
+            except Exception as fix_error:
+                embed.add_field(
+                    name="⚠️ Fix Warning",
+                    value=f"Could not fully repopulate due to foreign key constraints. Adding missing cards instead.\nError: {str(fix_error)[:100]}...",
+                    inline=False
+                )
+                
+                # Fallback: just add missing cards
+                existing_cards = db_manager.fetch_all('SELECT name FROM cards')
+                existing_card_names = {card[0] for card in existing_cards}
+                
+                added_count = 0
+                for card in card_library.get_all_cards():
+                    if card['name'] not in existing_card_names:
+                        try:
+                            if db_manager.db_type == 'postgresql':
+                                db_manager.execute_query('''INSERT INTO cards (name, element, rarity, attack, health, cost, ability, ascii_art) 
+                                                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+                                                        (card['name'], card['element'], card['rarity'], card['attack'], 
+                                                         card['health'], card['cost'], card['ability'], card['ascii']))
+                            else:
+                                db_manager.execute_query('''INSERT INTO cards (name, element, rarity, attack, health, cost, ability, ascii_art) 
+                                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                                                        (card['name'], card['element'], card['rarity'], card['attack'], 
+                                                         card['health'], card['cost'], card['ability'], card['ascii']))
+                            added_count += 1
+                        except Exception as add_error:
+                            print(f"Failed to add card {card['name']}: {add_error}")
+                
+                if added_count > 0:
+                    embed.add_field(
+                        name="✅ Partial Fix",
+                        value=f"Added {added_count} missing cards to database.",
+                        inline=False
+                    )
             
             # Verify fix
             new_card_count_result = db_manager.fetch_one('SELECT COUNT(*) FROM cards')
