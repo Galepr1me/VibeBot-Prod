@@ -1617,6 +1617,326 @@ async def battle_select_slash(interaction: discord.Interaction, card_name: str):
         print(f"Battle select error: {e}")
         await interaction.response.send_message("❌ Error selecting card for battle. Please try again.", ephemeral=True)
 
+@bot.tree.command(name='battle_attack', description='Attack your opponent in the current battle')
+async def battle_attack_slash(interaction: discord.Interaction):
+    """Attack your opponent in the current battle"""
+    if get_config('game_enabled') != 'True':
+        await interaction.response.send_message("The card game is currently disabled.", ephemeral=True)
+        return
+    
+    try:
+        # Find the player's active battle
+        battle = battle_manager.get_player_active_battle(interaction.user.id)
+        
+        if not battle:
+            await interaction.response.send_message("❌ You are not in an active battle! Use `/challenge @user` to start a battle.", ephemeral=True)
+            return
+        
+        # Check if battle is in progress
+        if battle.state.value != 'in_progress':
+            await interaction.response.send_message("❌ Battle is not in progress! Both players need to select cards first.", ephemeral=True)
+            return
+        
+        # Check if it's the player's turn
+        if not battle.is_player_turn(interaction.user.id):
+            current_turn_user = bot.get_user(battle.current_turn)
+            turn_name = current_turn_user.display_name if current_turn_user else f"Player {battle.current_turn}"
+            await interaction.response.send_message(f"❌ It's not your turn! Waiting for **{turn_name}** to attack.", ephemeral=True)
+            return
+        
+        # Execute the attack
+        attack_result = battle.attack(interaction.user.id)
+        
+        if not attack_result['success']:
+            await interaction.response.send_message(f"❌ Attack failed: {attack_result['message']}", ephemeral=True)
+            return
+        
+        # Save battle state
+        battle_manager.save_battle(battle)
+        
+        # Create attack result embed
+        embed = discord.Embed(
+            title="⚔️ Battle Attack!",
+            description=attack_result['message'],
+            color=0xff6b35
+        )
+        
+        # Get battle state for display
+        battle_state = attack_result['battle_state']
+        player1_card = battle_state['player1_card']
+        player2_card = battle_state['player2_card']
+        
+        # Add card status
+        if player1_card and player2_card:
+            player1_user = bot.get_user(battle.player1_id)
+            player2_user = bot.get_user(battle.player2_id)
+            
+            player1_name = player1_user.display_name if player1_user else f"Player {battle.player1_id}"
+            player2_name = player2_user.display_name if player2_user else f"Player {battle.player2_id}"
+            
+            # Create health bars
+            def create_health_bar(current_hp, max_hp, length=10):
+                if max_hp <= 0:
+                    return "💀 DEFEATED"
+                
+                percentage = current_hp / max_hp
+                filled = int(percentage * length)
+                empty = length - filled
+                
+                bar = "█" * filled + "░" * empty
+                return f"{bar} {current_hp}/{max_hp} HP"
+            
+            embed.add_field(
+                name=f"🃏 {player1_name}'s {player1_card['name']}",
+                value=f"❤️ {create_health_bar(player1_card['current_health'], player1_card['max_health'])}\n⚔️ {player1_card['current_attack']} ATK",
+                inline=True
+            )
+            
+            embed.add_field(
+                name=f"🃏 {player2_name}'s {player2_card['name']}",
+                value=f"❤️ {create_health_bar(player2_card['current_health'], player2_card['max_health'])}\n⚔️ {player2_card['current_attack']} ATK",
+                inline=True
+            )
+        
+        # Check if battle ended
+        if attack_result.get('target_defeated', False):
+            winner_id = attack_result['winner']
+            winner_user = bot.get_user(winner_id)
+            winner_name = winner_user.display_name if winner_user else f"Player {winner_id}"
+            
+            embed.add_field(
+                name="🏆 Battle Complete!",
+                value=f"**{winner_name}** wins the battle!\n\n🎁 **Rewards:**\n• +50 XP\n• +1 Pack Token",
+                inline=False
+            )
+            
+            # Award rewards to winner
+            try:
+                # Award XP
+                update_user_xp(winner_id, 50)
+                
+                # Award pack token
+                pack_system.add_pack_tokens(winner_id, 'standard', 1)
+                
+                print(f"[BATTLE_ATTACK] Battle {battle.battle_id} completed. Winner: {winner_id}")
+            except Exception as reward_error:
+                print(f"[BATTLE_ATTACK] Error awarding rewards: {reward_error}")
+            
+            # Clean up battle
+            battle_manager.finish_battle(battle.battle_id)
+            
+        else:
+            # Battle continues
+            next_turn_user = bot.get_user(battle.current_turn)
+            next_turn_name = next_turn_user.display_name if next_turn_user else f"Player {battle.current_turn}"
+            
+            embed.add_field(
+                name="🎮 Next Turn",
+                value=f"**{next_turn_name}**'s turn to attack!\nUse `/battle_attack` when ready.",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Battle ID: {battle.battle_id} • Turn: {battle.turn_number}")
+        
+        await interaction.response.send_message(embed=embed)
+        print(f"[BATTLE_ATTACK] Player {interaction.user.id} attacked in battle {battle.battle_id}")
+        
+    except Exception as e:
+        print(f"Battle attack error: {e}")
+        await interaction.response.send_message("❌ Error executing attack. Please try again.", ephemeral=True)
+
+@bot.tree.command(name='battle_status', description='View the current status of your battle')
+async def battle_status_slash(interaction: discord.Interaction):
+    """View the current status of your battle"""
+    if get_config('game_enabled') != 'True':
+        await interaction.response.send_message("The card game is currently disabled.", ephemeral=True)
+        return
+    
+    try:
+        # Find the player's active battle
+        battle = battle_manager.get_player_active_battle(interaction.user.id)
+        
+        if not battle:
+            await interaction.response.send_message("❌ You are not in an active battle! Use `/challenge @user` to start a battle.", ephemeral=True)
+            return
+        
+        # Get battle state
+        battle_state = battle.get_battle_state()
+        
+        # Create status embed
+        embed = discord.Embed(
+            title="⚔️ Battle Status",
+            description=f"**Battle ID:** {battle.battle_id}\n**Turn:** {battle.turn_number}\n**Phase:** {battle.phase.value.replace('_', ' ').title()}",
+            color=0x3498db
+        )
+        
+        # Get player information
+        player1_user = bot.get_user(battle.player1_id)
+        player2_user = bot.get_user(battle.player2_id)
+        
+        player1_name = player1_user.display_name if player1_user else f"Player {battle.player1_id}"
+        player2_name = player2_user.display_name if player2_user else f"Player {battle.player2_id}"
+        
+        # Add battle participants
+        embed.add_field(
+            name="👥 Battle Participants",
+            value=f"**Player 1:** {player1_name}\n**Player 2:** {player2_name}",
+            inline=True
+        )
+        
+        # Add current turn info
+        current_turn_user = bot.get_user(battle.current_turn)
+        current_turn_name = current_turn_user.display_name if current_turn_user else f"Player {battle.current_turn}"
+        your_turn = "✅ Your Turn!" if battle.current_turn == interaction.user.id else "⏳ Opponent's Turn"
+        
+        embed.add_field(
+            name="🎯 Current Turn",
+            value=f"**{current_turn_name}**\n{your_turn}",
+            inline=True
+        )
+        
+        # Add battle state
+        state_emoji = {
+            'card_selection': '🃏',
+            'in_progress': '⚔️',
+            'finished': '🏆',
+            'cancelled': '❌'
+        }
+        
+        embed.add_field(
+            name="📊 Battle State",
+            value=f"{state_emoji.get(battle.state.value, '❓')} {battle.state.value.replace('_', ' ').title()}",
+            inline=True
+        )
+        
+        # Add card information if battle is in progress
+        if battle.state.value == 'in_progress' and battle.player1_card and battle.player2_card:
+            # Create health bars
+            def create_health_bar(current_hp, max_hp, length=10):
+                if max_hp <= 0:
+                    return "💀 DEFEATED"
+                
+                percentage = current_hp / max_hp
+                filled = int(percentage * length)
+                empty = length - filled
+                
+                bar = "█" * filled + "░" * empty
+                return f"{bar} {current_hp}/{max_hp} HP"
+            
+            # Player 1 card
+            p1_card = battle.player1_card
+            embed.add_field(
+                name=f"🃏 {player1_name}'s {p1_card.name}",
+                value=f"❤️ {create_health_bar(p1_card.current_health, p1_card.max_health)}\n⚔️ {p1_card.current_attack} ATK\n🛡️ {p1_card.damage_reduction} Armor\n🎯 {p1_card.ability}",
+                inline=False
+            )
+            
+            # Player 2 card
+            p2_card = battle.player2_card
+            embed.add_field(
+                name=f"🃏 {player2_name}'s {p2_card.name}",
+                value=f"❤️ {create_health_bar(p2_card.current_health, p2_card.max_health)}\n⚔️ {p2_card.current_attack} ATK\n🛡️ {p2_card.damage_reduction} Armor\n🎯 {p2_card.ability}",
+                inline=False
+            )
+            
+            # Add action buttons if it's the player's turn
+            if battle.current_turn == interaction.user.id and battle.phase.value == 'attack':
+                embed.add_field(
+                    name="🎮 Available Actions",
+                    value="• `/battle_attack` - Attack your opponent\n• `/battle_forfeit` - Surrender the battle",
+                    inline=False
+                )
+        
+        # Add recent battle log
+        if battle.battle_log:
+            recent_log = battle.battle_log[-3:]  # Last 3 events
+            log_text = "\n".join([f"• {event['message']}" for event in recent_log])
+            embed.add_field(
+                name="📜 Recent Battle Log",
+                value=log_text,
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Use /battle_attack to attack • Use /battle_forfeit to surrender")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        print(f"Battle status error: {e}")
+        await interaction.response.send_message("❌ Error getting battle status. Please try again.", ephemeral=True)
+
+@bot.tree.command(name='battle_forfeit', description='Forfeit your current battle')
+async def battle_forfeit_slash(interaction: discord.Interaction):
+    """Forfeit your current battle"""
+    if get_config('game_enabled') != 'True':
+        await interaction.response.send_message("The card game is currently disabled.", ephemeral=True)
+        return
+    
+    try:
+        # Find the player's active battle
+        battle = battle_manager.get_player_active_battle(interaction.user.id)
+        
+        if not battle:
+            await interaction.response.send_message("❌ You are not in an active battle! Use `/challenge @user` to start a battle.", ephemeral=True)
+            return
+        
+        # Get opponent information
+        opponent_id = battle.get_opponent_id(interaction.user.id)
+        opponent_user = bot.get_user(opponent_id)
+        opponent_name = opponent_user.display_name if opponent_user else f"Player {opponent_id}"
+        
+        # End the battle with opponent as winner
+        battle._end_battle(opponent_id)
+        battle_manager.save_battle(battle)
+        
+        # Create forfeit embed
+        embed = discord.Embed(
+            title="🏳️ Battle Forfeited",
+            description=f"You have forfeited the battle against **{opponent_name}**.",
+            color=0xff9500
+        )
+        
+        embed.add_field(
+            name="🏆 Battle Result",
+            value=f"**Winner:** {opponent_name}\n**Result:** Victory by forfeit",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🎁 Opponent Rewards",
+            value="• +25 XP (forfeit victory)\n• +1 Pack Token",
+            inline=True
+        )
+        
+        # Award rewards to opponent
+        try:
+            # Award XP (less for forfeit victory)
+            update_user_xp(opponent_id, 25)
+            
+            # Award pack token
+            pack_system.add_pack_tokens(opponent_id, 'standard', 1)
+            
+            print(f"[BATTLE_FORFEIT] Battle {battle.battle_id} forfeited by {interaction.user.id}. Winner: {opponent_id}")
+        except Exception as reward_error:
+            print(f"[BATTLE_FORFEIT] Error awarding rewards: {reward_error}")
+        
+        # Clean up battle
+        battle_manager.finish_battle(battle.battle_id)
+        
+        embed.add_field(
+            name="🎮 What's Next?",
+            value="Use `/challenge @user` to start a new battle!\nUse `/cards` to view your collection.",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Battle ID: {battle.battle_id} • Better luck next time!")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"Battle forfeit error: {e}")
+        await interaction.response.send_message("❌ Error forfeiting battle. Please try again.", ephemeral=True)
+
 # Flask web server for cloud hosting
 app = Flask(__name__)
 
