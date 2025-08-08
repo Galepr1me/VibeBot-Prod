@@ -533,6 +533,22 @@ class BattleManager:
             self.save_battle(battle)
             del self.active_battles[battle_id]
             print(f"[BATTLE_MANAGER] Finished battle {battle_id}")
+    
+    def cancel_battle(self, battle_id: int):
+        """Cancel a battle"""
+        try:
+            battle = self.active_battles.get(battle_id)
+            if battle:
+                battle.state = BattleState.CANCELLED
+                battle.log_event("Battle cancelled")
+                self.save_battle(battle)
+                del self.active_battles[battle_id]
+                print(f"[BATTLE_MANAGER] Cancelled battle {battle_id}")
+                return True
+            return False
+        except Exception as e:
+            print(f"[BATTLE_MANAGER] Error cancelling battle {battle_id}: {e}")
+            return False
 
 
 # Global battle manager instance

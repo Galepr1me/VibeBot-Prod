@@ -335,7 +335,7 @@ class CardSelectionView(discord.ui.View):
         # Get the selected card data
         button = None
         for item in self.children:
-            if hasattr(item, 'card_data') and item.custom_id == interaction.data['custom_id']:
+            if hasattr(item, 'card_data'):
                 button = item
                 break
         
