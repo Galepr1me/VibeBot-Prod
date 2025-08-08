@@ -390,24 +390,68 @@ class CardSelectionView(discord.ui.View):
         
         # Check if battle is ready to start
         if battle.state.value == 'in_progress':
+            # Both players have selected - battle is ready!
             opponent_id = battle.get_opponent_id(self.user_id)
             opponent_card = battle.get_opponent_card(self.user_id)
             
+            # Get player names
+            user = interaction.client.get_user(self.user_id)
+            opponent_user = interaction.client.get_user(opponent_id)
+            user_name = user.display_name if user else f"Player {self.user_id}"
+            opponent_name = opponent_user.display_name if opponent_user else f"Player {opponent_id}"
+            
+            # Create battle ready embed
+            embed = discord.Embed(
+                title="⚔️ Battle Ready!",
+                description=f"Both players have selected their cards! The battle begins now!",
+                color=0xff6b35
+            )
+            
             embed.add_field(
-                name="⚔️ Battle Ready!",
-                value=f"Both players have selected cards!\n**Opponent:** {opponent_card.name}\n\nBattle begins now!",
+                name="🃏 Battle Matchup",
+                value=f"**{user_name}:** {name}\n**{opponent_name}:** {opponent_card.name}",
+                inline=True
+            )
+            
+            # Show who goes first
+            first_player_user = interaction.client.get_user(battle.current_turn)
+            first_player_name = first_player_user.display_name if first_player_user else f"Player {battle.current_turn}"
+            
+            embed.add_field(
+                name="🎯 Turn Order",
+                value=f"**{first_player_name}** goes first!\n{'✅ Your turn!' if battle.current_turn == self.user_id else '⏳ Wait for opponent'}",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="🎮 Battle Instructions",
+                value="Use the buttons below to take actions during your turn!\nThe battle interface will update after each action.",
                 inline=False
             )
             
             # Create battle interface
             battle_view = BattleView(battle.battle_id, self.user_id)
-            battle_embed = battle_view.create_battle_embed()
             
-            await interaction.response.edit_message(embed=battle_embed, view=battle_view)
+            await interaction.response.edit_message(embed=embed, view=battle_view)
+            
+            # Also send a notification to the original challenge message
+            # This would require storing the original message, for now we'll update this one
+            
         else:
+            # Only one player has selected - show waiting status
+            opponent_id = battle.get_opponent_id(self.user_id)
+            opponent_user = interaction.client.get_user(opponent_id)
+            opponent_name = opponent_user.display_name if opponent_user else f"Player {opponent_id}"
+            
+            embed.add_field(
+                name="✅ Card Selected!",
+                value=f"You selected **{name}** for battle!",
+                inline=False
+            )
+            
             embed.add_field(
                 name="⏳ Waiting for Opponent",
-                value="Waiting for your opponent to select their card...",
+                value=f"Waiting for **{opponent_name}** to select their card...\n\n🔔 **{opponent_name}** will be notified to select their card!",
                 inline=False
             )
             
@@ -646,7 +690,7 @@ class BattleView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
     
     def create_battle_embed(self):
-        """Create the main battle embed"""
+        """Create the main battle embed with enhanced turn communication"""
         battle = battle_manager.get_battle(self.battle_id)
         if not battle:
             return discord.Embed(title="❌ Battle Not Found", color=0xff0000)
@@ -656,19 +700,48 @@ class BattleView(discord.ui.View):
         player1_card = battle_state['player1_card']
         player2_card = battle_state['player2_card']
         
+        # Determine whose turn it is and create appropriate title
+        is_your_turn = battle.current_turn == self.user_id
+        current_turn_user = None
+        try:
+            # Try to get user from interaction client (this might not work in all contexts)
+            current_turn_user = battle_manager.db.bot.get_user(battle.current_turn) if hasattr(battle_manager.db, 'bot') else None
+        except:
+            pass
+        
+        current_turn_name = current_turn_user.display_name if current_turn_user else f"Player {battle.current_turn}"
+        
+        if is_your_turn:
+            title = f"⚔️ Your Turn to Attack! (Turn {battle.turn_number})"
+            color = 0x00ff00  # Green for your turn
+            description = f"🎯 **It's your turn!** Use the Attack button below to strike!\n**Battle ID:** {battle.battle_id}"
+        else:
+            title = f"⏳ Waiting for {current_turn_name} (Turn {battle.turn_number})"
+            color = 0xffa500  # Orange for waiting
+            description = f"🕐 **Waiting for opponent** to make their move...\n**Battle ID:** {battle.battle_id}"
+        
         embed = discord.Embed(
-            title="⚔️ Battle in Progress",
-            description=f"**Turn {battle.turn_number}** • Battle ID: {battle.battle_id}",
-            color=0xff6b35
+            title=title,
+            description=description,
+            color=color
         )
         
         if player1_card and player2_card:
-            # Get player names
-            player1_user = battle_manager.db.bot.get_user(battle.player1_id) if hasattr(battle_manager.db, 'bot') else None
-            player2_user = battle_manager.db.bot.get_user(battle.player2_id) if hasattr(battle_manager.db, 'bot') else None
+            # Get player names (fallback method)
+            player1_name = f"Player {battle.player1_id}"
+            player2_name = f"Player {battle.player2_id}"
             
-            player1_name = player1_user.display_name if player1_user else f"Player {battle.player1_id}"
-            player2_name = player2_user.display_name if player2_user else f"Player {battle.player2_id}"
+            # Try to get actual names
+            try:
+                if hasattr(battle_manager.db, 'bot'):
+                    p1_user = battle_manager.db.bot.get_user(battle.player1_id)
+                    p2_user = battle_manager.db.bot.get_user(battle.player2_id)
+                    if p1_user:
+                        player1_name = p1_user.display_name
+                    if p2_user:
+                        player2_name = p2_user.display_name
+            except:
+                pass
             
             # Create health bars
             def create_health_bar(current_hp, max_hp, length=10):
@@ -682,42 +755,53 @@ class BattleView(discord.ui.View):
                 bar = "█" * filled + "░" * empty
                 return f"{bar} {current_hp}/{max_hp} HP"
             
-            # Add card status
+            # Add turn indicator to player names
+            p1_indicator = " 🎯" if battle.current_turn == battle.player1_id else ""
+            p2_indicator = " 🎯" if battle.current_turn == battle.player2_id else ""
+            
+            # Add card status with turn indicators
             embed.add_field(
-                name=f"🃏 {player1_name}'s {player1_card['name']}",
+                name=f"🃏 {player1_name}'s {player1_card['name']}{p1_indicator}",
                 value=f"❤️ {create_health_bar(player1_card['current_health'], player1_card['max_health'])}\n⚔️ {player1_card['current_attack']} ATK",
                 inline=True
             )
             
             embed.add_field(
-                name=f"🃏 {player2_name}'s {player2_card['name']}",
+                name=f"🃏 {player2_name}'s {player2_card['name']}{p2_indicator}",
                 value=f"❤️ {create_health_bar(player2_card['current_health'], player2_card['max_health'])}\n⚔️ {player2_card['current_attack']} ATK",
                 inline=True
             )
             
-            # Current turn indicator
-            current_turn_user = battle_manager.db.bot.get_user(battle.current_turn) if hasattr(battle_manager.db, 'bot') else None
-            current_turn_name = current_turn_user.display_name if current_turn_user else f"Player {battle.current_turn}"
-            
-            your_turn = "✅ Your Turn!" if battle.current_turn == self.user_id else "⏳ Opponent's Turn"
-            
-            embed.add_field(
-                name="🎯 Current Turn",
-                value=f"**{current_turn_name}**\n{your_turn}",
-                inline=True
-            )
+            # Add clear action indicator
+            if is_your_turn:
+                embed.add_field(
+                    name="🎮 Your Action",
+                    value="✅ **Click [⚔️ Attack] to strike!**\n📊 Use [Status] for details\n🔄 Use [Refresh] to update",
+                    inline=True
+                )
+            else:
+                embed.add_field(
+                    name="⏳ Waiting",
+                    value=f"🕐 **{current_turn_name}** is choosing their action...\n📊 Use [Status] for details\n🔄 Use [Refresh] to update",
+                    inline=True
+                )
         
-        # Add recent battle log
+        # Add recent battle log with better formatting
         if battle.battle_log:
             recent_log = battle.battle_log[-2:]  # Last 2 events
             log_text = "\n".join([f"• {event['message']}" for event in recent_log])
             embed.add_field(
-                name="📜 Recent Events",
+                name="📜 Recent Battle Events",
                 value=log_text,
                 inline=False
             )
         
-        embed.set_footer(text="Use the buttons below to take actions in battle!")
+        # Enhanced footer with turn information
+        if is_your_turn:
+            embed.set_footer(text="🎯 Your turn! Click Attack to strike your opponent!")
+        else:
+            embed.set_footer(text=f"⏳ Waiting for {current_turn_name} to attack...")
+        
         return embed
     
     def create_detailed_status_embed(self):
