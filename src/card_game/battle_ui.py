@@ -73,7 +73,8 @@ class ChallengeView(discord.ui.View):
         
         # Disable all buttons in this view
         for item in self.children:
-            item.disabled = True
+            if hasattr(item, 'disabled'):
+                item.disabled = True
         
         await interaction.response.edit_message(embed=embed, view=card_select_view)
         
@@ -114,7 +115,8 @@ class ChallengeView(discord.ui.View):
         
         # Disable all buttons
         for item in self.children:
-            item.disabled = True
+            if hasattr(item, 'disabled'):
+                item.disabled = True
         
         await interaction.response.edit_message(embed=embed, view=self)
         self.stop()
@@ -156,7 +158,8 @@ class ChallengeView(discord.ui.View):
         
         # Disable all buttons
         for item in self.children:
-            item.disabled = True
+            if hasattr(item, 'disabled'):
+                item.disabled = True
         
         await interaction.response.edit_message(embed=embed, view=self)
         self.stop()
