@@ -62,8 +62,14 @@ class ChallengeView(discord.ui.View):
             inline=False
         )
         
+        # Get player names for clearer buttons
+        challenger_user = interaction.client.get_user(self.challenger_id)
+        opponent_user = interaction.client.get_user(self.opponent_id)
+        challenger_name = challenger_user.display_name if challenger_user else f"Player {self.challenger_id}"
+        opponent_name = opponent_user.display_name if opponent_user else f"Player {self.opponent_id}"
+        
         # Create card selection view for both players
-        card_select_view = CardSelectionPromptView(self.challenger_id, self.opponent_id, self.battle_id)
+        card_select_view = CardSelectionPromptView(self.challenger_id, self.opponent_id, self.battle_id, challenger_name, opponent_name)
         
         # Disable all buttons in this view
         for item in self.children:
@@ -161,15 +167,21 @@ class ChallengeView(discord.ui.View):
 class CardSelectionPromptView(discord.ui.View):
     """Card selection prompt with buttons for both players"""
     
-    def __init__(self, player1_id: int, player2_id: int, battle_id: int):
+    def __init__(self, player1_id: int, player2_id: int, battle_id: int, player1_name: str, player2_name: str):
         super().__init__(timeout=600)  # 10 minute timeout
         self.player1_id = player1_id
         self.player2_id = player2_id
         self.battle_id = battle_id
+        self.player1_name = player1_name
+        self.player2_name = player2_name
         self.player1_selected = False
         self.player2_selected = False
+        
+        # Update button labels with player names
+        self.children[0].label = f'{player1_name} - Select Card'
+        self.children[1].label = f'{player2_name} - Select Card'
     
-    @discord.ui.button(label='Card Select', emoji='🃏', style=discord.ButtonStyle.primary, custom_id='card_select_p1')
+    @discord.ui.button(label='Player 1 - Select Card', emoji='🃏', style=discord.ButtonStyle.primary, custom_id='card_select_p1')
     async def card_select_player1(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Card selection for player 1"""
         if interaction.user.id != self.player1_id:
@@ -178,7 +190,7 @@ class CardSelectionPromptView(discord.ui.View):
         
         await self._handle_card_selection(interaction, self.player1_id)
     
-    @discord.ui.button(label='Card Select', emoji='🃏', style=discord.ButtonStyle.primary, custom_id='card_select_p2')
+    @discord.ui.button(label='Player 2 - Select Card', emoji='🃏', style=discord.ButtonStyle.primary, custom_id='card_select_p2')
     async def card_select_player2(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Card selection for player 2"""
         if interaction.user.id != self.player2_id:
@@ -212,7 +224,7 @@ class CardSelectionPromptView(discord.ui.View):
             selection_view = CardSelectionView(user_id, self.battle_id, user_collection)
             embed = selection_view.create_selection_embed()
             
-            await interaction.response.send_message(embed=embed, view=selection_view, ephemeral=True)
+            await interaction.response.send_message(embed=embed, view=selection_view, ephemeral=False)
             print(f"[CARD_SELECT] Interactive card selection shown for user {user_id} in battle {self.battle_id}")
             
         except Exception as e:
