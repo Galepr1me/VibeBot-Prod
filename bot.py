@@ -796,9 +796,9 @@ async def help_slash(interaction: discord.Interaction):
                 value="🔹 `/debug_bot` - System diagnostics and troubleshooting\n🔹 `/bot_stats` - View bot statistics\n🔹 `/reload_cards` - Reload card library\n🔹 `/list_config` - View all configuration settings",
                 inline=False
             )
-            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.19")
+            embed.set_footer(text="🔐 Staff commands visible to Staff role only • Version 1.2.22")
         else:
-            embed.set_footer(text="💡 Tip: Use /daily every day for streak bonuses! • Version 1.2.19")
+            embed.set_footer(text="💡 Tip: Use interactive buttons for battles! • Version 1.2.22")
         
         # Check if interaction has already been responded to
         if not interaction.response.is_done():
