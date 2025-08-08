@@ -10,6 +10,243 @@ from .card_library import CardLibrary
 from .pack_system import pack_system
 
 
+class ChallengeView(discord.ui.View):
+    """Interactive challenge accept/reject interface"""
+    
+    def __init__(self, challenger_id: int, opponent_id: int, battle_id: int):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.challenger_id = challenger_id
+        self.opponent_id = opponent_id
+        self.battle_id = battle_id
+        self.challenge_accepted = False
+        self.challenge_cancelled = False
+    
+    @discord.ui.button(label='Accept Challenge', emoji='⚔️', style=discord.ButtonStyle.success)
+    async def accept_challenge(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Accept the battle challenge"""
+        if interaction.user.id != self.opponent_id:
+            await interaction.response.send_message("❌ Only the challenged player can accept this challenge!", ephemeral=True)
+            return
+        
+        if self.challenge_accepted or self.challenge_cancelled:
+            await interaction.response.send_message("❌ This challenge has already been responded to!", ephemeral=True)
+            return
+        
+        self.challenge_accepted = True
+        
+        # Get battle and update status
+        battle = battle_manager.get_battle(self.battle_id)
+        if not battle:
+            await interaction.response.send_message("❌ Battle not found!", ephemeral=True)
+            return
+        
+        # Create challenge accepted embed
+        challenger_user = interaction.client.get_user(self.challenger_id)
+        challenger_name = challenger_user.display_name if challenger_user else f"Player {self.challenger_id}"
+        
+        embed = discord.Embed(
+            title="✅ Challenge Accepted!",
+            description=f"{interaction.user.mention} has accepted the battle challenge from **{challenger_name}**!",
+            color=0x00ff00
+        )
+        
+        embed.add_field(
+            name="🎮 Battle Info",
+            value=f"**Battle ID:** {battle.battle_id}\n**Format:** 1v1 Single Card\n**Status:** Ready for card selection",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📋 Next Step",
+            value="Both players need to select their battle cards!\nUse the **Card Select** buttons below.",
+            inline=False
+        )
+        
+        # Create card selection view for both players
+        card_select_view = CardSelectionPromptView(self.challenger_id, self.opponent_id, self.battle_id)
+        
+        # Disable all buttons in this view
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.response.edit_message(embed=embed, view=card_select_view)
+        
+        print(f"[CHALLENGE] Challenge accepted: Battle {self.battle_id}")
+    
+    @discord.ui.button(label='Reject Challenge', emoji='❌', style=discord.ButtonStyle.danger)
+    async def reject_challenge(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Reject the battle challenge"""
+        if interaction.user.id != self.opponent_id:
+            await interaction.response.send_message("❌ Only the challenged player can reject this challenge!", ephemeral=True)
+            return
+        
+        if self.challenge_accepted or self.challenge_cancelled:
+            await interaction.response.send_message("❌ This challenge has already been responded to!", ephemeral=True)
+            return
+        
+        self.challenge_cancelled = True
+        
+        # Get challenger info
+        challenger_user = interaction.client.get_user(self.challenger_id)
+        challenger_name = challenger_user.display_name if challenger_user else f"Player {self.challenger_id}"
+        
+        # Cancel the battle
+        battle_manager.cancel_battle(self.battle_id)
+        
+        # Create rejection embed
+        embed = discord.Embed(
+            title="❌ Challenge Rejected",
+            description=f"{interaction.user.mention} has rejected the battle challenge from **{challenger_name}**.",
+            color=0xff0000
+        )
+        
+        embed.add_field(
+            name="🎮 What's Next?",
+            value=f"**{challenger_name}** can challenge other players or try again later.\nUse `/challenge @user` to start a new battle!",
+            inline=False
+        )
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+        self.stop()
+        
+        print(f"[CHALLENGE] Challenge rejected: Battle {self.battle_id} cancelled")
+    
+    @discord.ui.button(label='Cancel Challenge', emoji='🚫', style=discord.ButtonStyle.secondary)
+    async def cancel_challenge(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Cancel the battle challenge (challenger only)"""
+        if interaction.user.id != self.challenger_id:
+            await interaction.response.send_message("❌ Only the challenger can cancel this challenge!", ephemeral=True)
+            return
+        
+        if self.challenge_accepted or self.challenge_cancelled:
+            await interaction.response.send_message("❌ This challenge has already been responded to!", ephemeral=True)
+            return
+        
+        self.challenge_cancelled = True
+        
+        # Get opponent info
+        opponent_user = interaction.client.get_user(self.opponent_id)
+        opponent_name = opponent_user.display_name if opponent_user else f"Player {self.opponent_id}"
+        
+        # Cancel the battle
+        battle_manager.cancel_battle(self.battle_id)
+        
+        # Create cancellation embed
+        embed = discord.Embed(
+            title="🚫 Challenge Cancelled",
+            description=f"{interaction.user.mention} has cancelled their battle challenge to **{opponent_name}**.",
+            color=0x95a5a6
+        )
+        
+        embed.add_field(
+            name="🎮 What's Next?",
+            value="Use `/challenge @user` to start a new battle challenge!",
+            inline=False
+        )
+        
+        # Disable all buttons
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+        self.stop()
+        
+        print(f"[CHALLENGE] Challenge cancelled by challenger: Battle {self.battle_id}")
+
+
+class CardSelectionPromptView(discord.ui.View):
+    """Card selection prompt with buttons for both players"""
+    
+    def __init__(self, player1_id: int, player2_id: int, battle_id: int):
+        super().__init__(timeout=600)  # 10 minute timeout
+        self.player1_id = player1_id
+        self.player2_id = player2_id
+        self.battle_id = battle_id
+        self.player1_selected = False
+        self.player2_selected = False
+    
+    @discord.ui.button(label='Card Select', emoji='🃏', style=discord.ButtonStyle.primary, custom_id='card_select_p1')
+    async def card_select_player1(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Card selection for player 1"""
+        if interaction.user.id != self.player1_id:
+            await interaction.response.send_message("❌ This card selection is not for you!", ephemeral=True)
+            return
+        
+        await self._handle_card_selection(interaction, self.player1_id)
+    
+    @discord.ui.button(label='Card Select', emoji='🃏', style=discord.ButtonStyle.primary, custom_id='card_select_p2')
+    async def card_select_player2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Card selection for player 2"""
+        if interaction.user.id != self.player2_id:
+            await interaction.response.send_message("❌ This card selection is not for you!", ephemeral=True)
+            return
+        
+        await self._handle_card_selection(interaction, self.player2_id)
+    
+    async def _handle_card_selection(self, interaction: discord.Interaction, user_id: int):
+        """Handle card selection for a player"""
+        try:
+            # Get battle
+            battle = battle_manager.get_battle(self.battle_id)
+            if not battle:
+                await interaction.response.send_message("❌ Battle not found!", ephemeral=True)
+                return
+            
+            # Check if player already selected a card
+            player_card = battle.get_player_card(user_id)
+            if player_card:
+                await interaction.response.send_message(f"❌ You have already selected **{player_card.name}** for this battle!", ephemeral=True)
+                return
+            
+            # Get user's collection
+            user_collection = card_manager.get_user_collection(user_id)
+            if not user_collection:
+                await interaction.response.send_message("❌ You don't have any cards! Use `/pack` to get cards first.", ephemeral=True)
+                return
+            
+            # Create interactive card selection view
+            selection_view = CardSelectionView(user_id, self.battle_id, user_collection)
+            embed = selection_view.create_selection_embed()
+            
+            await interaction.response.send_message(embed=embed, view=selection_view, ephemeral=True)
+            print(f"[CARD_SELECT] Interactive card selection shown for user {user_id} in battle {self.battle_id}")
+            
+        except Exception as e:
+            print(f"Card selection error: {e}")
+            await interaction.response.send_message("❌ Error showing card selection. Please try again.", ephemeral=True)
+    
+    async def update_selection_status(self, user_id: int):
+        """Update the selection status when a player selects a card"""
+        if user_id == self.player1_id:
+            self.player1_selected = True
+        elif user_id == self.player2_id:
+            self.player2_selected = True
+        
+        # Check if both players have selected
+        if self.player1_selected and self.player2_selected:
+            # Both players selected - battle can begin
+            battle = battle_manager.get_battle(self.battle_id)
+            if battle and battle.state.value == 'in_progress':
+                # Create battle ready message
+                embed = discord.Embed(
+                    title="⚔️ Battle Ready!",
+                    description="Both players have selected their cards! The battle begins now!",
+                    color=0xff6b35
+                )
+                
+                # Create battle interface
+                battle_view = BattleView(self.battle_id, self.player1_id)
+                battle_embed = battle_view.create_battle_embed()
+                
+                # This would need to be called from the original message context
+                # For now, we'll let the individual card selection handle this
+                pass
+
+
 class CardSelectionView(discord.ui.View):
     """Interactive card selection for battles"""
     

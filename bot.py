@@ -17,7 +17,7 @@ from src.card_game.card_manager import card_manager
 from src.card_game.pack_system import pack_system
 from src.card_game.abilities import ability_system
 from src.card_game.battle_system import battle_manager
-from src.card_game.battle_ui import CardSelectionView, BattleView
+from src.card_game.battle_ui import CardSelectionView, BattleView, ChallengeView
 
 # Bot setup
 intents = discord.Intents.default()
@@ -1486,7 +1486,7 @@ async def challenge_slash(interaction: discord.Interaction, opponent: discord.Me
             await interaction.response.send_message("❌ Failed to create battle. Please try again.", ephemeral=True)
             return
         
-        # Create challenge embed
+        # Create challenge embed with interactive buttons
         embed = discord.Embed(
             title="⚔️ Battle Challenge!",
             description=f"{interaction.user.mention} has challenged {opponent.mention} to a card battle!",
@@ -1495,14 +1495,8 @@ async def challenge_slash(interaction: discord.Interaction, opponent: discord.Me
         
         embed.add_field(
             name="🎮 Battle Info",
-            value=f"**Battle ID:** {battle.battle_id}\n**Format:** 1v1 Single Card\n**Status:** Waiting for card selection",
+            value=f"**Battle ID:** {battle.battle_id}\n**Format:** 1v1 Single Card\n**Status:** Waiting for response",
             inline=True
-        )
-        
-        embed.add_field(
-            name="📋 Next Steps",
-            value="Both players need to select a card for battle!\nUse `/battle_select <card_name>` to choose your card.",
-            inline=False
         )
         
         embed.add_field(
@@ -1511,9 +1505,18 @@ async def challenge_slash(interaction: discord.Interaction, opponent: discord.Me
             inline=True
         )
         
-        embed.set_footer(text="Battle will be cancelled if no cards are selected within 10 minutes")
+        embed.add_field(
+            name="📋 Challenge Options",
+            value=f"**{opponent.display_name}:** Use the buttons below to respond!\n**{interaction.user.display_name}:** You can cancel if needed.",
+            inline=False
+        )
         
-        await interaction.response.send_message(embed=embed)
+        embed.set_footer(text="Challenge expires in 5 minutes if no response")
+        
+        # Create interactive challenge view
+        challenge_view = ChallengeView(interaction.user.id, opponent.id, battle.battle_id)
+        
+        await interaction.response.send_message(embed=embed, view=challenge_view)
         print(f"[CHALLENGE] Battle {battle.battle_id} created: {interaction.user.id} vs {opponent.id}")
         
     except Exception as e:
