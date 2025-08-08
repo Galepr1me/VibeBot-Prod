@@ -76,7 +76,28 @@ class ChallengeView(discord.ui.View):
             if hasattr(item, 'disabled'):
                 item.disabled = True
         
-        await interaction.response.edit_message(embed=embed, view=card_select_view)
+        # Create a thread for this battle to keep everything organized
+        try:
+            thread = await interaction.message.create_thread(
+                name=f"⚔️ Battle {battle.battle_id}: {challenger_name} vs {opponent_name}",
+                auto_archive_duration=60  # 1 hour
+            )
+            
+            # Send the card selection message in the thread
+            await thread.send(embed=embed, view=card_select_view)
+            
+            # Update the original message to point to the thread
+            thread_embed = discord.Embed(
+                title="✅ Challenge Accepted!",
+                description=f"Battle moved to thread: {thread.mention}\n\nBoth players should go to the thread to select cards and battle!",
+                color=0x00ff00
+            )
+            await interaction.response.edit_message(embed=thread_embed, view=None)
+            
+        except Exception as e:
+            print(f"[CHALLENGE] Error creating thread: {e}")
+            # Fallback to original method
+            await interaction.response.edit_message(embed=embed, view=card_select_view)
         
         print(f"[CHALLENGE] Challenge accepted: Battle {self.battle_id}")
     

@@ -173,6 +173,7 @@ class Battle:
             # Check if both players have selected cards
             if self.player1_card and self.player2_card:
                 self.state = BattleState.IN_PROGRESS
+                self.phase = TurnPhase.ATTACK  # Set to attack phase immediately
                 self.log_event(f"Battle begins! {self.player1_card.name} vs {self.player2_card.name}")
                 
                 # Trigger on_play abilities
