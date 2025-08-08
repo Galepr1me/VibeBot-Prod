@@ -740,10 +740,11 @@ class BattleView(discord.ui.View):
         is_your_turn = battle.current_turn == self.user_id
         current_turn_user = None
         try:
-            # Try to get user from interaction client (this might not work in all contexts)
-            current_turn_user = battle_manager.db.bot.get_user(battle.current_turn) if hasattr(battle_manager.db, 'bot') else None
+            # Try to get user from bot instance
+            from bot import bot
+            current_turn_user = bot.get_user(battle.current_turn)
         except:
-            pass
+            current_turn_user = None
         
         current_turn_name = current_turn_user.display_name if current_turn_user else f"Player {battle.current_turn}"
         
@@ -769,13 +770,13 @@ class BattleView(discord.ui.View):
             
             # Try to get actual names
             try:
-                if hasattr(battle_manager.db, 'bot'):
-                    p1_user = battle_manager.db.bot.get_user(battle.player1_id)
-                    p2_user = battle_manager.db.bot.get_user(battle.player2_id)
-                    if p1_user:
-                        player1_name = p1_user.display_name
-                    if p2_user:
-                        player2_name = p2_user.display_name
+                from bot import bot
+                p1_user = bot.get_user(battle.player1_id)
+                p2_user = bot.get_user(battle.player2_id)
+                if p1_user:
+                    player1_name = p1_user.display_name
+                if p2_user:
+                    player2_name = p2_user.display_name
             except:
                 pass
             
