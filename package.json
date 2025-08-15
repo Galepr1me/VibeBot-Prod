@@ -1,0 +1,24 @@
+{
+  "name": "vibebot-prod",
+  "version": "1.0.0",
+  "description": "A Discord community bot with XP levelling system and admin controls",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": ["discord", "bot", "xp", "levelling", "admin"],
+  "author": "Galepr1me",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

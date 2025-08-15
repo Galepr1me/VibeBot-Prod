@@ -1,232 +1,205 @@
-# VibeBot - Modular Discord Bot
+# VibeBot - Discord Community Bot
 
-A feature-rich Discord bot with XP systems, trading card games, and modular architecture following SOLID principles.
+A feature-rich Discord bot with XP levelling system and comprehensive admin controls, designed for community servers.
 
-## 🚀 Quick Start (Idiot-Proof Setup)
+## 🚀 Features
 
-### Prerequisites
-- Python 3.8 or higher
-- Discord Developer Account
-- (Optional) PostgreSQL database for cloud hosting
+### 📊 XP & Leveling System
+- **Automatic XP tracking** - Users earn XP by chatting (with spam protection)
+- **Scaling level system** - Progressive XP requirements for higher levels
+- **Level-up notifications** - Automatic announcements with customizable channels
+- **Leaderboards** - Server-wide XP rankings
+- **User profiles** - Check your own or others' levels and progress
 
-### 1. Clone and Setup
+### 🔨 Moderation Tools
+- **Kick & Ban commands** - Full moderation control with reason logging
+- **Permission-based access** - Commands respect Discord's permission system
+- **Role hierarchy protection** - Prevents abuse of moderation commands
+- **DM notifications** - Users receive notifications about moderation actions
+
+### 🛠️ Utility Commands
+- **Ping command** - Check bot latency and status
+- **Help system** - Comprehensive command documentation
+- **Error handling** - Robust error management and user feedback
+
+## 🏗️ Tech Stack
+
+- **Node.js** - Runtime environment
+- **Discord.js v14** - Discord API wrapper
+- **PostgreSQL** - Database (Neon.Tech)
+- **Render** - Cloud hosting platform
+
+## 📋 Prerequisites
+
+Before setting up the bot, you'll need:
+
+1. **Node.js 18+** installed on your system
+2. **Discord Application** created at [Discord Developer Portal](https://discord.com/developers/applications)
+3. **Neon.Tech PostgreSQL database** (or any PostgreSQL database)
+4. **Render account** for hosting (optional, for production)
+
+## ⚙️ Setup Instructions
+
+### 1. Clone the Repository
+
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd VibeBot
-
-# Install dependencies
-pip install -r requirements.txt
+git clone https://github.com/Galepr1me/VibeBot-Prod.git
+cd VibeBot-Prod
 ```
 
-### 2. Discord Bot Setup
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Click "New Application" and give it a name
-3. Go to "Bot" section and click "Add Bot"
-4. Copy the bot token (keep it secret!)
-5. Under "Privileged Gateway Intents", enable:
-   - Message Content Intent
-   - Server Members Intent (optional, for better username caching)
+### 2. Install Dependencies
 
-### 3. Bot Permissions
-When inviting your bot, use this permissions calculator:
-- **Required Permissions:**
-  - Send Messages
-  - Use Slash Commands
-  - Embed Links
-  - Read Message History
-  - Add Reactions
-- **Admin Permissions (for full features):**
-  - Administrator (recommended for ease of use)
+```bash
+npm install
+```
 
-### 4. Environment Setup
+### 3. Environment Configuration
 
-#### Option A: Local Development (SQLite)
-Create a `.env` file in the root directory:
+1. Copy the example environment file:
+```bash
+cp .env.example .env
+```
+
+2. Fill in your environment variables in `.env`:
 ```env
-DISCORD_TOKEN=your_bot_token_here
-# DATABASE_URL is optional for local development
+# Discord Bot Configuration
+DISCORD_TOKEN=your_discord_bot_token_here
+CLIENT_ID=your_discord_application_client_id_here
+
+# Database Configuration (Neon.Tech PostgreSQL)
+DATABASE_URL=postgresql://username:password@hostname:port/database_name
+
+# Bot Configuration
+PREFIX=/
+NODE_ENV=production
 ```
 
-#### Option B: Cloud Hosting (PostgreSQL)
-Create a `.env` file with both tokens:
-```env
-DISCORD_TOKEN=your_bot_token_here
-DATABASE_URL=postgresql://username:password@host:port/database
-```
+### 4. Database Setup
 
-### 5. Run the Bot
+The bot will automatically create the necessary tables when it starts. The database schema includes:
+- `users` - XP and level tracking
+- `guild_settings` - Server-specific configurations
+- `mod_logs` - Moderation action logging
+
+### 5. Deploy Slash Commands
+
+Before running the bot, deploy the slash commands to Discord:
+
 ```bash
-# For development
-python bot.py
-
-# For production (with auto-restart)
-python -u bot.py
+node deploy-commands.js
 ```
 
-## 🏗️ Project Structure (SOLID Architecture)
+### 6. Run the Bot
 
-```
-VibeBot/
-├── src/                          # Main source code
-│   ├── __init__.py
-│   ├── database/                 # Database layer (Single Responsibility)
-│   │   ├── __init__.py
-│   │   ├── connection.py         # Database connection management
-│   │   ├── models.py             # Data models and schemas
-│   │   └── setup.py              # Database initialization and migrations
-│   ├── card_game/                # Card game module (Open/Closed Principle)
-│   │   ├── __init__.py
-│   │   ├── card_library.py       # Card definitions and game rules
-│   │   ├── card_manager.py       # Card collection management
-│   │   ├── pack_system.py        # Pack opening and token system
-│   │   └── daily_rewards.py      # Daily reward system
-│   ├── commands/                 # Command handlers (Interface Segregation)
-│   │   ├── __init__.py
-│   │   ├── admin_commands.py     # Admin-only commands
-│   │   ├── card_commands.py      # Card game commands
-│   │   ├── xp_commands.py        # XP and leveling commands
-│   │   └── utility_commands.py   # General utility commands
-│   ├── services/                 # Business logic services (Dependency Inversion)
-│   │   ├── __init__.py
-│   │   ├── xp_service.py         # XP calculation and management
-│   │   ├── user_service.py       # User data management
-│   │   └── config_service.py     # Configuration management
-│   └── utils/                    # Utility functions and helpers
-│       ├── __init__.py
-│       ├── formatters.py         # Message and embed formatting
-│       ├── validators.py         # Input validation
-│       └── constants.py          # Application constants
-├── bot.py                        # Main bot entry point
-├── requirements.txt              # Python dependencies
-├── .env.example                  # Environment variables template
-├── .gitignore                    # Git ignore rules
-└── README.md                     # This file
-```
-
-## 🎮 Features
-
-### 🔥 Core Features
-- **XP System**: Automatic XP gain from chatting with progressive leveling
-- **Trading Card Game**: 64+ unique cards with ASCII art and abilities
-- **Daily Rewards**: Pack tokens and streak bonuses
-- **Admin Controls**: Comprehensive bot configuration without code changes
-
-### 🃏 Card Game Features
-- **6 Elements**: Fire, Water, Earth, Air, Light, Dark with rock-paper-scissors mechanics
-- **5 Rarities**: Common (60%), Rare (25%), Epic (10%), Legendary (4%), Mythic (1%)
-- **Pack Token System**: Earn tokens through daily rewards, spend to open packs
-- **Collection Management**: View, search, and organize your card collection
-
-### ⚙️ Admin Features
-- **Configuration System**: Change XP rates, messages, and game settings
-- **User Management**: Give tokens, cards, and manage user data
-- **Database Tools**: Wipe data, check status, and debug issues
-- **Real-time Statistics**: Server activity and engagement metrics
-
-## 📋 Commands Reference
-
-### 🎯 User Commands
-| Command | Description |
-|---------|-------------|
-| `/help` | Show all available commands and game guide |
-| `/level [user]` | Check your or another user's XP and level |
-| `/leaderboard [limit]` | Show top XP earners (default: 10) |
-| `/cards [page]` | View your card collection |
-| `/pack` | Open a card pack (requires pack tokens) |
-| `/daily` | Claim daily pack tokens and rewards |
-| `/view <card_name>` | View a specific card in ASCII art |
-| `/stats` | Show server bot statistics |
-
-### 🔧 Admin Commands
-| Command | Description |
-|---------|-------------|
-| `/config action:list` | View all bot configuration settings |
-| `/config action:get key:<key>` | Get a specific configuration value |
-| `/config action:set key:<key> value:<value>` | Change a configuration setting |
-| `/give_tokens user:<@user> quantity:<number>` | Give pack tokens to a user |
-| `/give_cards user:<@user> card_name:<name> quantity:<number>` | Give specific cards |
-| `/check_tokens user:<@user>` | Check a user's pack tokens and collection |
-| `/wipe_cards` | Wipe all user card data (with confirmation) |
-| `/debug_cards` | Debug card system issues |
-| `/status` | Show detailed bot and database status |
-
-## 🔧 Configuration Options
-
-Key configuration settings you can modify with `/config`:
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `xp_per_message` | XP gained per message | 15 |
-| `xp_cooldown` | Cooldown between XP gains (seconds) | 60 |
-| `level_multiplier` | Base XP required for leveling | 100 |
-| `level_scaling_factor` | How much harder each level gets | 1.2 |
-| `game_enabled` | Enable/disable card game | True |
-| `welcome_message` | Message for new members | Welcome to the server, {user}! |
-| `level_up_message` | Message when users level up | Congratulations {user}! You reached level {level}! |
-
-## 🗄️ Database Support
-
-### SQLite (Local Development)
-- Automatic setup, no configuration needed
-- Perfect for testing and development
-- Data stored in `bot_data.db` file
-
-### PostgreSQL (Production)
-- Supports cloud hosting (Render, Railway, Heroku, etc.)
-- Automatic connection with `DATABASE_URL` environment variable
-- Includes connection pooling and error handling
-- Falls back to SQLite if PostgreSQL fails
-
-## 🚀 Deployment
-
-### Local Development
+For development:
 ```bash
-python bot.py
+npm run dev
 ```
 
-### Cloud Hosting (Render/Railway/Heroku)
-1. Set environment variables:
-   - `DISCORD_TOKEN`: Your bot token
-   - `DATABASE_URL`: PostgreSQL connection string (optional)
-2. Deploy with `python bot.py` as the start command
-3. Bot will automatically detect cloud environment and configure accordingly
+For production:
+```bash
+npm start
+```
 
-## 🔍 Troubleshooting
+## 🌐 Deployment on Render
 
-### Common Issues
+### 1. Create a New Web Service
 
-**Bot doesn't respond to commands:**
-- Check bot permissions in Discord server
-- Ensure bot token is correct in `.env` file
-- Verify bot is online in Discord Developer Portal
+1. Go to [Render Dashboard](https://dashboard.render.com/)
+2. Click "New" → "Web Service"
+3. Connect your GitHub repository
 
-**Database errors:**
-- For PostgreSQL: Check `DATABASE_URL` format
-- For SQLite: Ensure write permissions in bot directory
-- Use `/status` command to check database connection
+### 2. Configure Build Settings
 
-**Card system not working:**
-- Use `/debug_cards` to identify issues
-- Check if cards are populated in database
-- Verify pack token system with `/check_tokens`
+- **Build Command**: `npm install`
+- **Start Command**: `npm start`
+- **Node Version**: 18 or higher
 
-**Slash commands not appearing:**
-- Bot needs `applications.commands` scope when invited
-- Commands sync automatically on startup
-- Re-invite bot with proper permissions if needed
+### 3. Environment Variables
 
-### Debug Commands
-- `/status` - Complete system health check
-- `/debug_cards` - Card system diagnostics
-- `/config action:list` - View all settings
+Add the following environment variables in Render:
+- `DISCORD_TOKEN`
+- `CLIENT_ID`
+- `DATABASE_URL`
+- `NODE_ENV=production`
+
+### 4. Deploy
+
+Render will automatically deploy your bot. The first deployment may take a few minutes.
+
+## 📚 Commands
+
+### XP & Leveling
+- `/level [user]` - Check level and XP stats
+- `/leaderboard [limit]` - View server XP leaderboard
+
+### Moderation (Requires Permissions)
+- `/kick <user> [reason]` - Kick a user from the server
+- `/ban <user> [reason] [delete_days]` - Ban a user from the server
+
+### Utility
+- `/ping` - Check bot latency and status
+- `/help` - Show all available commands
+
+## 🔧 Configuration
+
+### XP System Settings
+- **XP Rate**: 15 base XP per message (configurable)
+- **Cooldown**: 60 seconds between XP gains
+- **Level Formula**: `100 * level^1.5` XP required per level
+
+### Database Schema
+
+The bot uses three main tables:
+
+#### Users Table
+```sql
+- user_id (VARCHAR) - Discord user ID
+- guild_id (VARCHAR) - Discord server ID
+- username (VARCHAR) - User's display name
+- xp (INTEGER) - Total XP earned
+- level (INTEGER) - Current level
+- total_messages (INTEGER) - Message count
+- timestamps for tracking
+```
+
+#### Guild Settings Table
+```sql
+- guild_id (VARCHAR) - Discord server ID
+- xp_enabled (BOOLEAN) - XP system toggle
+- xp_rate (INTEGER) - XP per message
+- level_up_channel (VARCHAR) - Channel for level notifications
+- admin/mod roles configuration
+```
+
+## 🛡️ Security Features
+
+- **Permission validation** - All moderation commands check Discord permissions
+- **Role hierarchy respect** - Users can't moderate higher-ranked members
+- **Input sanitization** - All user inputs are properly validated
+- **Error handling** - Comprehensive error management prevents crashes
+
+## 🔄 Auto-Updates
+
+The bot is configured for easy updates:
+1. Push changes to your GitHub repository
+2. Render automatically redeploys the updated code
+3. Database migrations run automatically if needed
+
+## 📊 Monitoring
+
+The bot includes comprehensive logging:
+- **Console logs** for all major events
+- **Error tracking** with detailed stack traces
+- **Moderation logs** stored in database
+- **Performance metrics** via ping command
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Follow the modular architecture patterns
-4. Add tests for new features
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
 5. Submit a pull request
 
 ## 📄 License
@@ -235,12 +208,21 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🆘 Support
 
-- **Issues**: Report bugs via GitHub Issues
-- **Discord**: Use `/reportbug` command in your server
-- **Documentation**: Check this README and inline code comments
+If you encounter any issues:
+1. Check the console logs for error messages
+2. Verify your environment variables are correct
+3. Ensure the bot has proper permissions in your Discord server
+4. Check that your database is accessible
+
+## 🔮 Future Features
+
+Planned enhancements:
+- **Role rewards** - Automatic role assignment based on levels
+- **Custom XP multipliers** - Per-channel XP rate configuration
+- **Advanced moderation** - Temporary bans, mute system
+- **Statistics dashboard** - Web interface for server stats
+- **Custom commands** - User-defined command system
 
 ---
 
 **Made with ❤️ for Discord communities**
-
-*VibeBot - Bringing engagement and fun to your Discord server!*
