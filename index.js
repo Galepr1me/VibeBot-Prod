@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, Collection, Events, ActivityType } = require(
 const { initializeDatabase, getUser, createUser, updateUserXP, getGuildSettings, createGuildSettings } = require('./database');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 require('dotenv').config();
 
 // Create Discord client with necessary intents
@@ -215,6 +216,23 @@ process.on('unhandledRejection', error => {
 process.on('uncaughtException', error => {
   console.error('❌ Uncaught exception:', error);
   process.exit(1);
+});
+
+// Create a simple HTTP server for Render port binding
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    status: 'online',
+    bot: client.user ? client.user.tag : 'Starting...',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  }));
+});
+
+// Start HTTP server on Render's port
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`🌐 HTTP server running on port ${PORT}`);
 });
 
 // Login to Discord
