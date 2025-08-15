@@ -52,15 +52,17 @@ async function deployCommands() {
 
 // Deploy commands and start bot
 (async () => {
-  console.log('🔄 Deploying slash commands...');
+  console.log('🔄 Attempting to deploy slash commands...');
   const deployed = await deployCommands();
   
   if (deployed) {
-    console.log('🤖 Starting bot...');
-    // Start the main bot
-    require('./index.js');
+    console.log('✅ Commands deployed successfully!');
   } else {
-    console.error('❌ Failed to deploy commands. Bot will not start.');
-    process.exit(1);
+    console.warn('⚠️ Command deployment failed, but starting bot anyway...');
+    console.warn('💡 You will need to deploy commands manually once CLIENT_ID is fixed.');
   }
+  
+  console.log('🤖 Starting bot...');
+  // Start the main bot regardless of command deployment status
+  require('./index.js');
 })();
