@@ -29,12 +29,12 @@ module.exports = {
     let userData = await getUser(targetUser.id, guildId);
     
     if (!userData) {
-      if (targetUser.id === interaction.user.id) {
-        // Create user if checking own stats
-        userData = await createUser(targetUser.id, guildId, targetUser.username);
-      } else {
+      // Create user for anyone being checked (they start with 0 XP)
+      userData = await createUser(targetUser.id, guildId, targetUser.username);
+      
+      if (!userData) {
         return interaction.reply({
-          content: `❌ ${targetUser.username} hasn't earned any XP yet!`,
+          content: `❌ Failed to retrieve user data for ${targetUser.username}!`,
           ephemeral: true
         });
       }

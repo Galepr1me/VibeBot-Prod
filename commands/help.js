@@ -29,6 +29,16 @@ module.exports = {
           inline: false
         },
         {
+          name: '⚙️ **Admin Configuration Commands**',
+          value: '`/xp-config toggle <enabled>` - Enable/disable XP system\n`/xp-config rate <amount>` - Set base XP rate per message\n`/xp-config channel [channel]` - Set level-up notification channel\n`/xp-config view` - View current XP settings',
+          inline: false
+        },
+        {
+          name: '🎛️ **XP Management Commands**',
+          value: '`/xp-manage add <user> <amount>` - Add XP to a user\n`/xp-manage remove <user> <amount>` - Remove XP from a user\n`/xp-manage set <user> <amount>` - Set user\'s XP to specific amount\n`/xp-manage reset <user>` - Reset a user\'s XP to 0\n`/xp-manage reset-all` - Reset ALL users\' XP (dangerous!)',
+          inline: false
+        },
+        {
           name: '⚙️ **XP System Info**',
           value: '• Earn XP by chatting in the server\n• XP is gained every 60 seconds to prevent spam\n• Level up notifications are sent automatically\n• XP rates can be configured by admins',
           inline: false
